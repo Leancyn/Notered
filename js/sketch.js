@@ -1,11 +1,11 @@
 /**
  * sketch.js - Sketch Reference Module for Notered
- * 
+ *
  * Allows users to search for reference images and convert them
  * to pencil sketches using Canvas color-dodge blending technique.
  */
 
-import { Storage } from './storage.js';
+import { Storage } from "./storage.js";
 
 export class SketchSearch {
   /**
@@ -18,18 +18,18 @@ export class SketchSearch {
     this.onResults = options.onResults || (() => {});
     this.onLoading = options.onLoading || (() => {});
     this.onError = options.onError || (() => {});
-    
-    this._apiKey = '';
+
+    this._apiKey = "";
     this._worker = null;
     this._cache = new Map();
-    
+
     this._loadApiKey();
   }
 
   /** Load API key from storage */
   _loadApiKey() {
     const settings = Storage.loadSettings();
-    this._apiKey = settings.apiKey || '';
+    this._apiKey = settings.apiKey || "aS5uJ3zTxy5gr5IcIlnaJ-zFUIdvcHirXc-jvlLApPM";
   }
 
   /** Update API key */
@@ -72,10 +72,9 @@ export class SketchSearch {
       this._cache.set(cacheKey, results);
       this.onResults(results);
       return results;
-
     } catch (err) {
-      console.error('Sketch search error:', err);
-      this.onError('Gagal mencari gambar. Periksa koneksi internet.');
+      console.error("Sketch search error:", err);
+      this.onError("Gagal mencari gambar. Periksa koneksi internet.");
       return [];
     } finally {
       this.onLoading(false);
@@ -84,28 +83,28 @@ export class SketchSearch {
 
   /** Search via Unsplash API */
   async _searchUnsplash(query, page, perPage) {
-    const url = new URL('https://api.unsplash.com/search/photos');
-    url.searchParams.set('query', query);
-    url.searchParams.set('page', page);
-    url.searchParams.set('per_page', perPage);
-    url.searchParams.set('orientation', 'squarish');
+    const url = new URL("https://api.unsplash.com/search/photos");
+    url.searchParams.set("query", query);
+    url.searchParams.set("page", page);
+    url.searchParams.set("per_page", perPage);
+    url.searchParams.set("orientation", "squarish");
 
     const res = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Client-ID ${this._apiKey}`
-      }
+        Authorization: `Client-ID ${this._apiKey}`,
+      },
     });
 
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
-        throw new Error('API key tidak valid');
+        throw new Error("API key tidak valid");
       }
       throw new Error(`Unsplash API error: ${res.status}`);
     }
 
     const data = await res.json();
 
-    return data.results.map(photo => ({
+    return data.results.map((photo) => ({
       id: photo.id,
       thumb: photo.urls.small,
       regular: photo.urls.regular,
@@ -115,7 +114,7 @@ export class SketchSearch {
       authorUrl: photo.user.links.html,
       color: photo.color,
       width: photo.width,
-      height: photo.height
+      height: photo.height,
     }));
   }
 
@@ -124,22 +123,22 @@ export class SketchSearch {
    */
   async _searchFallback(query, page, perPage) {
     try {
-      const url = new URL('https://commons.wikimedia.org/w/api.php');
-      url.searchParams.set('action', 'query');
-      url.searchParams.set('generator', 'search');
+      const url = new URL("https://commons.wikimedia.org/w/api.php");
+      url.searchParams.set("action", "query");
+      url.searchParams.set("generator", "search");
       // Search for images with query word
-      url.searchParams.set('gsrsearch', `filetype:bitmap ${query}`);
-      url.searchParams.set('gsrlimit', perPage.toString());
-      url.searchParams.set('prop', 'imageinfo');
-      url.searchParams.set('iiprop', 'url');
-      url.searchParams.set('format', 'json');
-      url.searchParams.set('origin', '*'); // Crucial for CORS
+      url.searchParams.set("gsrsearch", `filetype:bitmap ${query}`);
+      url.searchParams.set("gsrlimit", perPage.toString());
+      url.searchParams.set("prop", "imageinfo");
+      url.searchParams.set("iiprop", "url");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("origin", "*"); // Crucial for CORS
 
       const res = await fetch(url.toString());
-      if (!res.ok) throw new Error('Wikimedia fetch failed');
+      if (!res.ok) throw new Error("Wikimedia fetch failed");
 
       const data = await res.json();
-      
+
       if (!data.query || !data.query.pages) {
         // If no results, try fallback picsum
         return this._getPlaceholderResults(query, page, perPage);
@@ -147,27 +146,26 @@ export class SketchSearch {
 
       const pages = Object.values(data.query.pages);
       return pages
-        .filter(page => page.imageinfo && page.imageinfo[0] && page.imageinfo[0].url)
-        .map(page => {
+        .filter((page) => page.imageinfo && page.imageinfo[0] && page.imageinfo[0].url)
+        .map((page) => {
           const imgUrl = page.imageinfo[0].url;
           // Clean title
-          const title = page.title.replace('File:', '').replace(/\.[^/.]+$/, "");
+          const title = page.title.replace("File:", "").replace(/\.[^/.]+$/, "");
           return {
             id: `wiki-${page.pageid}`,
             thumb: imgUrl,
             regular: imgUrl,
             full: imgUrl,
             alt: title || query,
-            author: 'Wikimedia Commons',
-            authorUrl: 'https://commons.wikimedia.org',
-            color: '#FFF8E7',
+            author: "Wikimedia Commons",
+            authorUrl: "https://commons.wikimedia.org",
+            color: "#FFF8E7",
             width: 600,
-            height: 600
+            height: 600,
           };
         });
-
     } catch (err) {
-      console.warn('Wikimedia search failed, using placeholders:', err);
+      console.warn("Wikimedia search failed, using placeholders:", err);
       return this._getPlaceholderResults(query, page, perPage);
     }
   }
@@ -175,7 +173,7 @@ export class SketchSearch {
   /** Emergency placeholder generator */
   _getPlaceholderResults(query, page, perPage) {
     const results = [];
-    const startId = ((page - 1) * perPage) + 1;
+    const startId = (page - 1) * perPage + 1;
     for (let i = 0; i < perPage; i++) {
       const seed = `${query}-${startId + i}`;
       const id = Math.abs(this._hashCode(seed)) % 1000;
@@ -185,11 +183,11 @@ export class SketchSearch {
         regular: `https://picsum.photos/seed/${encodeURIComponent(seed)}/800/800`,
         full: `https://picsum.photos/seed/${encodeURIComponent(seed)}/1200/1200`,
         alt: query,
-        author: 'Lorem Picsum (Mew)',
-        authorUrl: 'https://picsum.photos',
-        color: '#FFFDF5',
+        author: "Lorem Picsum (Mew)",
+        authorUrl: "https://picsum.photos",
+        color: "#FFFDF5",
         width: 800,
-        height: 800
+        height: 800,
       });
     }
     return results;
@@ -200,7 +198,7 @@ export class SketchSearch {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash |= 0;
     }
     return hash;
@@ -216,8 +214,8 @@ export class SketchSearch {
   async convertToSketch(imageUrl, blurAmount = 10, onProgress = () => {}) {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
+      img.crossOrigin = "anonymous";
+
       img.onload = () => {
         try {
           onProgress(10);
@@ -226,18 +224,18 @@ export class SketchSearch {
           const maxSize = 1200;
           let w = img.naturalWidth;
           let h = img.naturalHeight;
-          
+
           if (w > maxSize || h > maxSize) {
             const ratio = Math.min(maxSize / w, maxSize / h);
             w = Math.floor(w * ratio);
             h = Math.floor(h * ratio);
           }
 
-          const canvas = document.createElement('canvas');
+          const canvas = document.createElement("canvas");
           canvas.width = w;
           canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          
+          const ctx = canvas.getContext("2d");
+
           // Draw original
           ctx.drawImage(img, 0, 0, w, h);
           onProgress(20);
@@ -270,7 +268,7 @@ export class SketchSearch {
           for (let i = 0; i < gray.length; i++) {
             const base = gray[i];
             const blend = blurred2[i];
-            
+
             let result;
             if (blend === 255) {
               result = 255;
@@ -290,21 +288,20 @@ export class SketchSearch {
           ctx.putImageData(imageData, 0, 0);
 
           // Optional: increase contrast slightly for sharper lines
-          ctx.globalCompositeOperation = 'multiply';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.globalCompositeOperation = "multiply";
+          ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
           ctx.fillRect(0, 0, w, h);
-          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalCompositeOperation = "source-over";
 
           onProgress(100);
           resolve(canvas);
-
         } catch (err) {
           reject(err);
         }
       };
 
       img.onerror = () => {
-        reject(new Error('Gagal memuat gambar'));
+        reject(new Error("Gagal memuat gambar"));
       };
 
       img.src = imageUrl;
@@ -370,10 +367,10 @@ export class SketchSearch {
    * @param {HTMLCanvasElement} canvas - The sketch canvas
    * @param {string} filename - Download filename
    */
-  downloadSketch(canvas, filename = 'sketsa-notered.png') {
-    const link = document.createElement('a');
+  downloadSketch(canvas, filename = "sketsa-notered.png") {
+    const link = document.createElement("a");
     link.download = filename;
-    link.href = canvas.toDataURL('image/png');
+    link.href = canvas.toDataURL("image/png");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
