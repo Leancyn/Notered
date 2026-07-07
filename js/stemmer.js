@@ -7,6 +7,7 @@
 
 // Irregular stems mapping
 const IRREGULAR_WORDS = {
+  // Original entries
   'belajar': 'ajar',
   'pelajar': 'ajar',
   'mengajar': 'ajar',
@@ -21,7 +22,42 @@ const IRREGULAR_WORDS = {
   'menerbangkan': 'terbang',
   'melihat': 'lihat',
   'kelihatan': 'lihat',
-  'penglihatan': 'lihat'
+  'penglihatan': 'lihat',
+  
+  // Additional common words
+  'membaca': 'baca',
+  'pembaca': 'baca',
+  'pembacaan': 'baca',
+  'menulis': 'tulis',
+  'penulisan': 'tulis',
+  'menulisnya': 'tulis',
+  'makan': 'makan',
+  'pemakan': 'makan',
+  'pemakanan': 'makan',
+  'minum': 'minum',
+  'pemimunan': 'minum',
+  'bekerja': 'kerja',
+  'pekerjaan': 'kerja',
+  'pekerja': 'kerja',
+  'pekerjaan': 'kerja',
+  'berjalan': 'jalan',
+  'jalan': 'jalan',
+  'melajang': 'lajang',
+  'lajang': 'lajang',
+  'berlari': 'lari',
+  'lari': 'lari',
+  'bermain': 'main',
+  'permainan': 'main',
+  'berbicara': 'bicara',
+  'berbicara': 'bicara',
+  'pembicaraan': 'bicara',
+  'bersekolah': 'sekolah',
+  'sekolah': 'sekolah',
+  'sekolahan': 'sekolah',
+  'bekerja': 'kerja',
+  'kerja': 'kerja',
+  'pekerja': 'kerja',
+  'pekerjaan': 'kerja',
 };
 
 /**

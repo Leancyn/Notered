@@ -3,6 +3,7 @@
  *
  * Coordinates dictionary loadings, sets up spell checkers, editor managers,
  * sketch modules, and handles DOM bindings and screen switching.
+ * Extended with Mood Tracker, Journal Prompts, Theme Picker & Affirmations.
  */
 
 import { UI } from "./ui.js";
@@ -12,6 +13,8 @@ import { Editor } from "./editor.js";
 import { SketchSearch } from "./sketch.js";
 import { Storage } from "./storage.js";
 import { Export } from "./export.js";
+import { KbbiApi } from "./kbbi-api.js";
+import { MoodTracker } from "./mood-tracker.js";
 
 class App {
   constructor() {
@@ -20,6 +23,7 @@ class App {
     this.spellChecker = null;
     this.editor = null;
     this.sketch = null;
+    this.moodTracker = null;
 
     this._appLoadingScreen = null;
     this._init();
@@ -28,6 +32,9 @@ class App {
   async _init() {
     this._appLoadingScreen = document.getElementById("app-loading");
     this.ui = new UI();
+
+    // 0. Initialize Mood Tracker (for journal prompts, affirmations, streak)
+    this.moodTracker = new MoodTracker();
 
     // 1. Initialize Dictionary & Spellcheck
     this.dictionary = new Dictionary();
@@ -48,7 +55,7 @@ class App {
     this.editor = new Editor(editorEl, this.spellChecker, {
       onStatsUpdate: (stats) => this._updateStatsUI(stats),
       onWordClick: (data) => this._handleWordClick(data),
-      onSave: () => this.ui.showToast("Draft tersimpan otomatis (meow~)", "success"),
+      onSave: () => this._onEditorSave(),
       onMascotUpdate: (mood) => this._updateMascotMood(mood),
     });
 
@@ -58,7 +65,13 @@ class App {
     // 5. Restore active draft or load sample content
     this._restoreActiveDraft();
 
-    // 6. Hide loading screen
+    // 6. Initialize Mood tab content
+    this._renderMoodPanel();
+
+    // 7. Apply saved theme
+    this._applyTheme(Storage.loadSettings().theme || 'light');
+
+    // 8. Hide loading screen
     if (this._appLoadingScreen) {
       this._appLoadingScreen.style.opacity = "0";
       setTimeout(() => {
@@ -77,6 +90,8 @@ class App {
         // Contextual updates when switching tabs
         if (tabName === "draft") {
           this._renderDraftsList();
+        } else if (tabName === "mood") {
+          this._renderMoodPanel();
         }
       });
     });
@@ -122,7 +137,6 @@ class App {
 
     if (inputFontSize) {
       inputFontSize.value = settings.fontSize || 16;
-      // Set editor font size initially
       document.getElementById("editor-area").style.fontSize = `${settings.fontSize || 16}px`;
 
       inputFontSize.addEventListener("input", (e) => {
@@ -145,7 +159,6 @@ class App {
         this.editor.setAutoCorrect(checked);
         this.ui.showToast(checked ? "Koreksi otomatis aktif" : "Koreksi otomatis nonaktif", "info");
       });
-      // Pass initial state to Editor
       this.editor.setAutoCorrect(settings.autoCorrect !== false);
     }
 
@@ -183,12 +196,251 @@ class App {
         if (e.target === sketchOverlay) this._hideSketchModal();
       });
     }
+
+    // Theme picker
+    document.querySelectorAll(".theme-option").forEach((opt) => {
+      opt.addEventListener("click", () => {
+        const theme = opt.dataset.theme;
+        this._applyTheme(theme);
+        const curr = Storage.loadSettings();
+        curr.theme = theme;
+        Storage.saveSettings(curr);
+        document.querySelectorAll(".theme-option").forEach((o) => o.classList.remove("active"));
+        opt.classList.add("active");
+        this.ui.showToast(`Tema ${theme} diterapkan! 🌸`, "success");
+      });
+    });
+  }
+
+  /* --- New: Mood Tracker / Journal Panel --- */
+
+  _renderMoodPanel() {
+    const container = document.getElementById("mood-panel");
+    if (!container) return;
+
+    const todayMood = this.moodTracker.getTodayMood();
+    const streak = this.moodTracker.getStreak();
+    const affirmation = MoodTracker.getRandomAffirmation();
+    const dailyPrompt = MoodTracker.getDailyPrompt();
+    const history = this.moodTracker.getMoodHistory(7);
+    const stats = this.moodTracker.getStats();
+
+    const moods = MoodTracker.getMoodOptions();
+
+    // Time-based greeting
+    const hour = new Date().getHours();
+    let greeting = "Hari yang indah";
+    if (hour < 11) greeting = "Selamat pagi";
+    else if (hour < 15) greeting = "Selamat siang";
+    else if (hour < 18) greeting = "Selamat sore";
+    else greeting = "Selamat malam";
+
+    container.innerHTML = `
+      <div class="mood-greeting">
+        <svg class="mood-greeting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        <span>${greeting}, cantik</span>
+      </div>
+
+      <div class="mood-affirmation">${this._escapeHtml(affirmation)}</div>
+
+      <div class="mood-section-title">Apa kabar hatimu hari ini?</div>
+      <div class="mood-grid" id="mood-grid">
+        ${moods.map((m, idx) => `
+          <button class="mood-btn ${todayMood && todayMood.label === m.label ? 'active' : ''}" data-mood-index="${idx}" style="${todayMood && todayMood.label === m.label ? `border-color:${m.color};background:${m.bg};` : ''}">
+            <span class="mood-btn-icon">${m.svg}</span>
+            <span class="mood-btn-label">${m.label}</span>
+          </button>
+        `).join('')}
+      </div>
+
+      ${streak.count > 0 ? `
+      <div style="display:flex;justify-content:center;">
+        <div class="streak-badge">
+          <svg class="streak-badge-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 23c-1.5 0-3.1-.6-4.2-1.8-2.7-2.6-6.8-5.9-6.8-10.7 0-4 3.3-7.5 7-7.5 1.3 0 2.5.4 3.5 1.1V1.5c0-.6.4-1 1-1s1 .4 1 1V4c1-.7 2.2-1.1 3.5-1.1 3.7 0 7 3.4 7 7.5 0 4.7-4.1 8.1-6.8 10.7C15.1 22.4 13.5 23 12 23z"/></svg>
+          <span>${streak.count} hari menulis berturut-turut!</span>
+        </div>
+      </div>` : ''}
+
+      <div class="mood-section-title">Riwayat Mood 7 Hari</div>
+      <div class="mood-history">
+        ${history.map(h => `
+          <div class="mood-history-item">
+            <div class="mood-history-dot ${h.mood ? 'filled' : ''}" style="${h.mood ? `background:${h.mood.bg};border-color:${h.mood.color};color:${h.mood.color};` : ''}">
+              ${h.mood ? h.mood.svg : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="5" x2="19" y2="19"/></svg>'}
+            </div>
+            <div class="mood-history-label">${h.dateLabel}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="mood-section-title">Prompt Jurnal Hari Ini</div>
+      <div class="prompt-card" id="prompt-card-today">
+        <div class="prompt-card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <div class="prompt-card-text">${this._escapeHtml(dailyPrompt)}</div>
+        <svg class="prompt-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <div class="mood-section-title">Statistik Jurnal</div>
+      <div class="mood-stats-row">
+        <div class="mood-stat-card">
+          <div class="mood-stat-number">${stats.totalEntries}</div>
+          <div class="mood-stat-label">Total Check-in</div>
+        </div>
+        <div class="mood-stat-card">
+          <div class="mood-stat-icon">${stats.mostCommonMood ? stats.mostCommonMood.svg : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>'}</div>
+          <div class="mood-stat-number" style="font-size:0.8rem;">${stats.mostCommonMood ? stats.mostCommonMood.label : '—'}</div>
+          <div class="mood-stat-label">Mood Terbanyak</div>
+        </div>
+        <div class="mood-stat-card">
+          <div class="mood-stat-number">${streak.count}</div>
+          <div class="mood-stat-label">Streak</div>
+        </div>
+      </div>
+    `;
+
+    // Bind mood button clicks
+    container.querySelectorAll(".mood-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.dataset.moodIndex);
+        this.moodTracker.setMood(idx);
+        this._renderMoodPanel(); // Re-render to update active state
+        this.ui.showToast(`Mood hari ini: ${MoodTracker.getMoodOptions()[idx].label}`, "success");
+      });
+    });
+
+    // Bind prompt click -> switch to editor tab with prompt
+    const promptCard = document.getElementById("prompt-card-today");
+    if (promptCard) {
+      promptCard.addEventListener("click", () => {
+        const currentText = this.editor.getPlainText();
+        if (currentText.trim()) {
+          this.editor.setContent(currentText + "\n\n📝 " + dailyPrompt + "\n");
+        } else {
+          this.editor.setContent("📝 " + dailyPrompt + "\n");
+        }
+        this.moodTracker.markWrittenToday();
+        this.ui.switchTab("tulis");
+        this.ui.showToast("Prompt siap ditulis! Semoga menginspirasi ✨", "info");
+      });
+    }
+  }
+
+  /* --- New: Theme Application --- */
+
+  _applyTheme(theme) {
+    const root = document.documentElement;
+
+    // Reset to defaults first
+    root.style.setProperty('--bg-primary', '#FFFDF5');
+    root.style.setProperty('--bg-secondary', '#FFF8E7');
+    root.style.setProperty('--bg-tertiary', '#FFF3D6');
+    root.style.setProperty('--bg-glass', 'rgba(255, 248, 220, 0.65)');
+    root.style.setProperty('--accent', '#F5C542');
+    root.style.setProperty('--accent-hover', '#E8A838');
+    root.style.setProperty('--accent-soft', '#FDEAB0');
+    root.style.setProperty('--accent-peach', '#F5D0A9');
+    root.style.setProperty('--text-primary', '#3D2E1C');
+    root.style.setProperty('--text-secondary', '#8A7A66');
+    root.style.setProperty('--cat-pink', '#FFB5C2');
+    root.style.setProperty('--cat-cream', '#FFF0E0');
+    root.style.setProperty('--border', 'rgba(139, 109, 56, 0.12)');
+    root.style.setProperty('--shadow', 'rgba(139, 109, 56, 0.08)');
+    root.style.setProperty('--shadow-lg', 'rgba(139, 109, 56, 0.15)');
+
+    // Update theme-color meta
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+
+    if (theme === 'pink') {
+      root.style.setProperty('--bg-primary', '#FFF0F5');
+      root.style.setProperty('--bg-secondary', '#FFE8EE');
+      root.style.setProperty('--bg-tertiary', '#FFDCE6');
+      root.style.setProperty('--bg-glass', 'rgba(255, 232, 238, 0.65)');
+      root.style.setProperty('--accent', '#FFB5C2');
+      root.style.setProperty('--accent-hover', '#F090A0');
+      root.style.setProperty('--accent-soft', '#FFD0D8');
+      root.style.setProperty('--accent-peach', '#FFC0C8');
+      root.style.setProperty('--text-primary', '#5C3038');
+      root.style.setProperty('--text-secondary', '#9A7078');
+      root.style.setProperty('--cat-pink', '#FFB5C2');
+      root.style.setProperty('--cat-cream', '#FFF0E0');
+      root.style.setProperty('--border', 'rgba(200, 100, 120, 0.12)');
+      root.style.setProperty('--shadow', 'rgba(200, 100, 120, 0.08)');
+      root.style.setProperty('--shadow-lg', 'rgba(200, 100, 120, 0.15)');
+      if (metaTheme) metaTheme.setAttribute('content', '#FFF0F5');
+    } else if (theme === 'lavender') {
+      root.style.setProperty('--bg-primary', '#F5F0FF');
+      root.style.setProperty('--bg-secondary', '#EDE5FF');
+      root.style.setProperty('--bg-tertiary', '#E5D8FF');
+      root.style.setProperty('--bg-glass', 'rgba(237, 229, 255, 0.65)');
+      root.style.setProperty('--accent', '#C9B5FF');
+      root.style.setProperty('--accent-hover', '#B095F0');
+      root.style.setProperty('--accent-soft', '#DCCEFF');
+      root.style.setProperty('--accent-peach', '#D0C0F5');
+      root.style.setProperty('--text-primary', '#3A285C');
+      root.style.setProperty('--text-secondary', '#7868A0');
+      root.style.setProperty('--cat-pink', '#D0B0F0');
+      root.style.setProperty('--cat-cream', '#F5EEFF');
+      root.style.setProperty('--border', 'rgba(100, 60, 160, 0.10)');
+      root.style.setProperty('--shadow', 'rgba(100, 60, 160, 0.08)');
+      root.style.setProperty('--shadow-lg', 'rgba(100, 60, 160, 0.15)');
+      if (metaTheme) metaTheme.setAttribute('content', '#F5F0FF');
+    } else if (theme === 'rosegold') {
+      root.style.setProperty('--bg-primary', '#FFF5F0');
+      root.style.setProperty('--bg-secondary', '#FFEDE5');
+      root.style.setProperty('--bg-tertiary', '#FFE0D0');
+      root.style.setProperty('--bg-glass', 'rgba(255, 237, 229, 0.65)');
+      root.style.setProperty('--accent', '#F0A8A8');
+      root.style.setProperty('--accent-hover', '#E08080');
+      root.style.setProperty('--accent-soft', '#F8D0C8');
+      root.style.setProperty('--accent-peach', '#F5C0B8');
+      root.style.setProperty('--text-primary', '#5C3030');
+      root.style.setProperty('--text-secondary', '#907070');
+      root.style.setProperty('--cat-pink', '#F0C0B0');
+      root.style.setProperty('--cat-cream', '#FFF0E8');
+      root.style.setProperty('--border', 'rgba(180, 100, 80, 0.12)');
+      root.style.setProperty('--shadow', 'rgba(180, 100, 80, 0.08)');
+      root.style.setProperty('--shadow-lg', 'rgba(180, 100, 80, 0.15)');
+      if (metaTheme) metaTheme.setAttribute('content', '#FFF5F0');
+    } else if (theme === 'mint') {
+      root.style.setProperty('--bg-primary', '#F0FFF5');
+      root.style.setProperty('--bg-secondary', '#E0F8E8');
+      root.style.setProperty('--bg-tertiary', '#D0F0D8');
+      root.style.setProperty('--bg-glass', 'rgba(224, 248, 232, 0.65)');
+      root.style.setProperty('--accent', '#A8F0C0');
+      root.style.setProperty('--accent-hover', '#80D8A0');
+      root.style.setProperty('--accent-soft', '#C8F8D8');
+      root.style.setProperty('--accent-peach', '#B8F0C8');
+      root.style.setProperty('--text-primary', '#2A4A30');
+      root.style.setProperty('--text-secondary', '#688070');
+      root.style.setProperty('--cat-pink', '#B0D8C0');
+      root.style.setProperty('--cat-cream', '#E8F8EE');
+      root.style.setProperty('--border', 'rgba(60, 140, 80, 0.10)');
+      root.style.setProperty('--shadow', 'rgba(60, 140, 80, 0.08)');
+      root.style.setProperty('--shadow-lg', 'rgba(60, 140, 80, 0.15)');
+      if (metaTheme) metaTheme.setAttribute('content', '#F0FFF5');
+    } else {
+      // Light (default)
+      if (metaTheme) metaTheme.setAttribute('content', '#FFFDF5');
+    }
+
+    // Update active theme option in settings
+    document.querySelectorAll(".theme-option").forEach((o) => {
+      o.classList.toggle("active", o.dataset.theme === theme);
+    });
+  }
+
+  /* --- New: On Editor Save hook --- */
+
+  _onEditorSave() {
+    this.moodTracker.markWrittenToday();
+    this.ui.showToast("Draft tersimpan otomatis (meow~)", "success");
   }
 
   /* --- Text Editor Coordinations --- */
 
   _updateStatsUI(stats) {
-    // Updates footer statistics pills
     const pillWords = document.getElementById("stats-words");
     const pillAccuracy = document.getElementById("stats-accuracy");
     const pillReadTime = document.getElementById("stats-read-time");
@@ -198,7 +450,7 @@ class App {
     if (pillReadTime) pillReadTime.textContent = stats.readTime;
   }
 
-  _handleWordClick(data) {
+  async _handleWordClick(data) {
     const subtitle = data.type === "tidak_baku" ? `Kata tidak baku. Sebaiknya gunakan: "${data.bakuForm}"` : "Kata tidak ditemukan di KBBI.";
 
     this.ui.showBottomSheet({
@@ -208,6 +460,57 @@ class App {
       onSelect: (newWord) => data.replaceWith(newWord),
       onReplaceAll: (newWord) => data.replaceAll(data.word, newWord),
     });
+
+    try {
+      const kbbi = await KbbiApi.lookup(data.word);
+
+      const contentEl = document.querySelector(".bottom-sheet-content");
+      if (!contentEl) return;
+
+      const defBlock = document.createElement("div");
+      defBlock.style.marginTop = "14px";
+      defBlock.style.padding = "12px 12px";
+      defBlock.style.borderRadius = "12px";
+      defBlock.style.background = "rgba(255,255,255,0.04)";
+      defBlock.style.border = "1px solid rgba(255,255,255,0.12)";
+
+      const defText = kbbi && kbbi.def ? kbbi.def : null;
+      const posText = kbbi && kbbi.pos ? kbbi.pos : null;
+      const examples = kbbi && kbbi.examples ? kbbi.examples : [];
+
+      defBlock.innerHTML = `
+        <div style="font-weight:800;color:var(--text-primary);margin-bottom:6px;">Definisi KBBI</div>
+        <div style="color:var(--text-secondary);font-size:0.9rem;line-height:1.5;">
+          ${posText ? `<div style="margin-bottom:6px;"><strong style="color:var(--text-primary);">Kata kelas:</strong> ${this._escapeHtml(posText)}</div>` : ``}
+          ${defText ? this._escapeHtml(defText) : `<em style="color:var(--text-secondary);">Definisi tidak tersedia.</em>`}
+        </div>
+        ${
+          examples && examples.length
+            ? `
+          <div style="margin-top:10px;color:var(--text-secondary);font-size:0.85rem;">
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px;">Contoh</div>
+            ${examples
+              .slice(0, 3)
+              .map((ex) => `<div>• ${this._escapeHtml(ex)}</div>`)
+              .join("")}
+          </div>
+        `
+            : ``
+        }
+      `;
+
+      contentEl.appendChild(defBlock);
+    } catch (e) {
+      console.warn("KBbi lookup failed:", e);
+      const contentEl = document.querySelector(".bottom-sheet-content");
+      if (!contentEl) return;
+      const errBlock = document.createElement("div");
+      errBlock.style.marginTop = "14px";
+      errBlock.style.color = "var(--text-secondary)";
+      errBlock.style.fontSize = "0.85rem";
+      errBlock.textContent = "Gagal memuat definisi KBBI (GitHub).";
+      contentEl.appendChild(errBlock);
+    }
   }
 
   _updateMascotMood(mood) {
@@ -218,17 +521,14 @@ class App {
     if (!eyeLeft || !eyeRight || !mouth) return;
 
     if (mood === "happy") {
-      // Happy curved eyes
       eyeLeft.setAttribute("d", "M 14,14 A 2,2 0 0,1 18,14");
       eyeRight.setAttribute("d", "M 22,14 A 2,2 0 0,1 26,14");
       mouth.setAttribute("d", "M 17,21 Q 20,24 23,21");
     } else if (mood === "worried") {
-      // Worried slanted eyes
       eyeLeft.setAttribute("d", "M 13,13 L 17,15");
       eyeRight.setAttribute("d", "M 27,13 L 23,15");
       mouth.setAttribute("d", "M 18,22 Q 20,20 22,22");
     } else {
-      // Neutral dots
       eyeLeft.setAttribute("d", "M 15 15 A 1.5 1.5 0 1 1 15 14.9");
       eyeRight.setAttribute("d", "M 25 15 A 1.5 1.5 0 1 1 25 14.9");
       mouth.setAttribute("d", "M 18,20 Q 20,22 22,20");
@@ -245,7 +545,6 @@ class App {
       }
     }
 
-    // Fallback: create initial welcome draft
     this.editor.setContent(
       "Halo! Selamat datang di Notered. meow~\n\n" +
         "Ini adalah asisten menulis Bahasa Indonesia per kata. " +
@@ -283,7 +582,6 @@ class App {
           Export.downloadTxt(text);
           this.ui.showToast("File .txt didownload", "success");
         } else if (option === "Download Laporan Koreksi") {
-          // Gather spelling errors from highlights
           const errs = [];
           const spans = document.querySelectorAll(".word-error, .word-warning");
           spans.forEach((span) => {
@@ -337,9 +635,24 @@ class App {
         minute: "2-digit",
       });
 
+      // Check if this draft has a mood associated (from the date it was saved)
+      let moodSvg = '';
+      try {
+        const dateKey = new Date(draft.updatedAt);
+        const key = dateKey.getFullYear() + '-' + String(dateKey.getMonth()+1).padStart(2,'0') + '-' + String(dateKey.getDate()).padStart(2,'0');
+        const moodLog = JSON.parse(localStorage.getItem('notered_mood_log') || '{}');
+        const moodIdx = moodLog[key];
+        if (moodIdx !== undefined) {
+          const moods = MoodTracker.getMoodOptions();
+          if (moods[moodIdx]) {
+            moodSvg = '<span style="display:inline-block;width:16px;height:16px;vertical-align:middle;margin-right:4px;">' + moods[moodIdx].svg + '</span> ';
+          }
+        }
+      } catch(e) {}
+
       card.innerHTML = `
         <div class="draft-info">
-          <div class="draft-title">${this._escapeHtml(draft.title)}</div>
+          <div class="draft-title">${moodSvg}${this._escapeHtml(draft.title)}</div>
           <div class="draft-meta">${draft.wordCount} kata • Diperbarui ${date}</div>
         </div>
         <button class="icon-btn btn-delete-draft" data-id="${draft.id}" title="Hapus draft">
@@ -347,9 +660,8 @@ class App {
         </button>
       `;
 
-      // Click card -> Open draft in editor
       card.addEventListener("click", (e) => {
-        if (e.target.closest(".btn-delete-draft")) return; // Avoid bubble
+        if (e.target.closest(".btn-delete-draft")) return;
 
         Storage.setActiveDraftId(draft.id);
         this.editor.setHtmlContent(draft.htmlContent || draft.content);
@@ -357,7 +669,6 @@ class App {
         this.ui.showToast(`Draft "${draft.title}" dimuat (mew!)`, "info");
       });
 
-      // Click delete button -> remove draft
       const deleteBtn = card.querySelector(".btn-delete-draft");
       if (deleteBtn) {
         deleteBtn.addEventListener("click", (e) => {
@@ -439,12 +750,10 @@ class App {
       authorEl.href = photo.authorUrl;
     }
 
-    // Set tab states defaults (Sketch is main)
     document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
     const tabSketch = document.getElementById("tab-show-sketch");
     if (tabSketch) tabSketch.classList.add("active");
 
-    // Display image loading progress
     container.innerHTML = `
       <div class="sketch-progress-container">
         <div class="sketch-progress-bar-bg">
@@ -454,7 +763,6 @@ class App {
       </div>
     `;
 
-    // Process image to sketch
     let sketchCanvas = null;
     let originalImgEl = null;
 
@@ -472,23 +780,19 @@ class App {
     };
 
     try {
-      // 1. Process sketch
       const blurVal = sliderBlur ? parseInt(sliderBlur.value) : 10;
       sketchCanvas = await this.sketch.convertToSketch(photo.regular, blurVal, renderProgress);
 
-      // 2. Preload original image for toggle tab
       originalImgEl = new Image();
       originalImgEl.src = photo.regular;
       originalImgEl.className = "animate-fade-in";
 
-      // Show sketch by default
       container.innerHTML = "";
       container.appendChild(sketchCanvas);
 
-      // 3. Register switch tabs between Original and Sketch
       const tabOrig = document.getElementById("tab-show-original");
       if (tabOrig) {
-        tabOrig.replaceWith(tabOrig.cloneNode(true)); // Clear old listeners
+        tabOrig.replaceWith(tabOrig.cloneNode(true));
         document.getElementById("tab-show-original").addEventListener("click", () => {
           document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
           document.getElementById("tab-show-original").classList.add("active");
@@ -507,17 +811,14 @@ class App {
         });
       }
 
-      // 4. Register slider updates
       if (sliderBlur) {
-        sliderBlur.replaceWith(sliderBlur.cloneNode(true)); // Clear listeners
+        sliderBlur.replaceWith(sliderBlur.cloneNode(true));
         const newSlider = document.getElementById("sketch-blur-slider");
         newSlider.addEventListener("change", async () => {
           const val = parseInt(newSlider.value);
-          // Show quick re-process loader
           container.innerHTML = `<div style="font-weight:700;color:var(--text-secondary);">Memproses ulang...</div>`;
           try {
             sketchCanvas = await this.sketch.convertToSketch(photo.regular, val, () => {});
-            // Switch to sketch tab view
             document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
             document.getElementById("tab-show-sketch").classList.add("active");
             container.innerHTML = "";
@@ -528,7 +829,6 @@ class App {
         });
       }
 
-      // 5. Register download
       if (btnDownload) {
         btnDownload.replaceWith(btnDownload.cloneNode(true));
         const newDownload = document.getElementById("btn-download-sketch");

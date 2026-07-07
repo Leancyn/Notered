@@ -25,6 +25,7 @@
   <link rel="stylesheet" href="css/editor.css">
   <link rel="stylesheet" href="css/sketch.css">
   <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/mood.css">
 </head>
 
 <body>
@@ -131,7 +132,7 @@
             <svg style="width:12px;height:12px;fill:currentColor;margin-right:2px;" viewBox="0 0 24 24">
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 11H7v-2h4V7h2v6z" />
             </svg>
-            <span id="stats-read-time-val">&lt; 1 menit</span>
+            <span id="stats-read-time-val">< 1 menit</span>
           </div>
         </div>
       </div>
@@ -174,30 +175,40 @@
       </div>
     </section>
 
+    <!-- Tab 4: Mood / Journal (New Feature for Reflective Writing) -->
+    <section id="view-mood" class="view-panel" style="height: 100%; overflow-y: auto;">
+      <div class="mood-panel" id="mood-panel">
+        <!-- Dynamically rendered by app.js / mood-tracker.js -->
+      </div>
+    </section>
+
   </main>
 
   <!-- iOS-Style Bottom Navigation Tab Bar -->
   <nav class="bottom-tab-bar glass">
     <button class="tab-item active" data-tab="tulis">
       <svg viewBox="0 0 24 24">
-        <path
-          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
       </svg>
       <span>Tulis</span>
     </button>
     <button class="tab-item" data-tab="sketsa">
       <svg viewBox="0 0 24 24">
-        <path
-          d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
+        <path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
       </svg>
       <span>Sketsa</span>
     </button>
     <button class="tab-item" data-tab="draft">
       <svg viewBox="0 0 24 24">
-        <path
-          d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+        <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
       </svg>
       <span>Draft</span>
+    </button>
+    <button class="tab-item" data-tab="mood">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      </svg>
+      <span>Mood</span>
     </button>
   </nav>
 
@@ -220,8 +231,7 @@
       <h3 class="settings-title">Pengaturan</h3>
       <button class="icon-btn" id="btn-close-settings">
         <svg viewBox="0 0 24 24">
-          <path
-            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
         </svg>
       </button>
     </div>
@@ -246,6 +256,28 @@
         style="width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer;" checked>
     </div>
 
+    <!-- Theme Picker -->
+    <div class="settings-group">
+      <label class="settings-label">Tema Warna</label>
+      <div class="theme-picker" id="theme-picker">
+        <div class="theme-option active" data-theme="light" style="background: #FFFDF5; border-color: #F5C542;" title="Classic Light">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/></svg>
+        </div>
+        <div class="theme-option" data-theme="pink" style="background: #FFF0F5; border-color: #FFB5C2;" title="Soft Pink">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <div class="theme-option" data-theme="lavender" style="background: #F5F0FF; border-color: #C9B5FF;" title="Lavender">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="theme-option" data-theme="rosegold" style="background: #FFF5F0; border-color: #F0A8A8;" title="Rose Gold">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <div class="theme-option" data-theme="mint" style="background: #F0FFF5; border-color: #A8F0C0;" title="Mint Green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 0-7.07 17.07A10 10 0 1 0 12 2z"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+      </div>
+    </div>
+
     <div class="settings-group" style="margin-top:auto;">
       <button class="capsule-btn capsule-btn-outline" id="settings-clear-cache"
         style="color:var(--error);border-color:var(--error);">
@@ -261,8 +293,7 @@
         <h3 class="sketch-modal-title">Sketsa Referensi</h3>
         <button class="icon-btn" id="btn-close-sketch">
           <svg viewBox="0 0 24 24">
-            <path
-              d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
           </svg>
         </button>
       </div>
@@ -294,8 +325,7 @@
         </p>
         <button class="capsule-btn" id="btn-download-sketch">
           <svg style="width:18px;height:18px;fill:currentColor;" viewBox="0 0 24 24">
-            <path
-              d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
           </svg>
           Download Gambar Sketsa (PNG)
         </button>

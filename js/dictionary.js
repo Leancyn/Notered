@@ -1,20 +1,27 @@
 /**
  * dictionary.js - Notered Dictionary Loader and Cacher
- * 
+ *
  * Fetches and parses the kbbi-words database. Implements
  * IndexedDB storage to speed up consecutive app loads.
  */
 
-const DB_NAME = 'NoteredDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'dictionary';
-const KEY_NAME = 'kbbi_words';
+const DB_NAME = "NoteredDB";
+const DB_VERSION = 3;
+const STORE_NAME = "dictionary";
+const KEY_NAME = "kbbi_words";
 
 export class Dictionary {
   constructor() {
     this._words = new Set();
     this._wordsArray = []; // Sorted array for binary searches & autocomplete
     this._isLoaded = false;
+
+    // Optional: GitHub-backed KBBI wordlist for better suggestion accuracy
+    this._kbbiWordSources = [
+      // You can replace with RAW URLs if you want.
+      // Use RAW GitHub so fetch works reliably in browsers.
+      "https://raw.githubusercontent.com/dyazincahya/KBBI-SQL-database/main/dictionary__JSON.json",
+    ];
   }
 
   /**
@@ -31,27 +38,43 @@ export class Dictionary {
         return;
       }
 
-      // 2. Fetch from static JSON file
-      const res = await fetch('./data/kbbi-words.json');
-      if (!res.ok) {
-        throw new Error('Gagal mengambil database KBBI');
+      // 2. Fetch from GitHub dataset
+      const githubWords = await this._fetchKbbiWordsFromGitHub();
+      if (githubWords && githubWords.length) {
+        this._populate(githubWords);
+        this._isLoaded = true;
+        this._saveToCache(githubWords).catch((err) => {
+          console.warn("IndexedDB write warning:", err);
+        });
+        return;
       }
 
-      const words = await res.json();
-      
+      // Fallback: local dictionary__JSON.json (safety net)
+      const res = await fetch("./data/dictionary__JSON.json");
+      if (!res.ok) {
+        throw new Error("Gagal mengambil database KBBI");
+      }
+      const payload = await res.json();
+
+      // dictionary__JSON.json format:
+      // { dictionary: [ { _id, word, arti, type }, ... ] }
+      // Convert to base word list for inclusion checks/autocomplete.
+      const dict = Array.isArray(payload?.dictionary) ? payload.dictionary : Array.isArray(payload) ? payload : [];
+      const words = dict.map((e) => e?.word ?? "").filter(Boolean);
+
       // 3. Populate internal structures
       this._populate(words);
+
       this._isLoaded = true;
 
       // 4. Save to cache asynchronously
-      this._saveToCache(words).catch(err => {
-        console.warn('IndexedDB write warning:', err);
+      this._saveToCache(words).catch((err) => {
+        console.warn("IndexedDB write warning:", err);
       });
-
     } catch (err) {
-      console.error('Dictionary load failure:', err);
+      console.error("Dictionary load failure:", err);
       // Fail-safe: try to load an emergency basic set in case everything failed
-      this._populate(['ada', 'baca', 'tulis', 'kerja', 'kucing', 'tidak', 'sudah', 'bisa', 'saya', 'kamu']);
+      this._populate(["ada", "baca", "tulis", "kerja", "kucing", "tidak", "sudah", "bisa", "saya", "kamu"]);
       this._isLoaded = true;
     }
   }
@@ -139,7 +162,7 @@ export class Dictionary {
   _openDB() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      
+
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -156,7 +179,7 @@ export class Dictionary {
     try {
       const db = await this._openDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const transaction = db.transaction(STORE_NAME, "readonly");
         const store = transaction.objectStore(STORE_NAME);
         const request = store.get(KEY_NAME);
 
@@ -168,11 +191,66 @@ export class Dictionary {
     }
   }
 
+  async _fetchKbbiWordsFromGitHub() {
+    // Returns array of base word strings from GitHub dataset.
+    // If dataset is an object, we extract keys.
+    // If dataset is an array, we use it directly.
+    // This function also handles CORS by converting github.com blob URLs to raw.
+    if (!this._kbbiWordSources || !this._kbbiWordSources.length) return null;
+
+    const toRaw = (url) => {
+      if (typeof url !== "string") return url;
+      if (url.startsWith("https://raw.githubusercontent.com/")) return url;
+      try {
+        const u = new URL(url);
+        const parts = u.pathname.split("/").filter(Boolean);
+        const blobIdx = parts.indexOf("blob");
+        if (blobIdx === -1) return url;
+        const user = parts[0];
+        const repo = parts[1];
+        const branch = parts[blobIdx + 1];
+        const rest = parts.slice(blobIdx + 2).join("/");
+        if (!user || !repo || !branch || !rest) return url;
+        return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${rest}`;
+      } catch {
+        return url;
+      }
+    };
+
+    for (const src of this._kbbiWordSources) {
+      const rawUrl = toRaw(src);
+      try {
+        const res = await fetch(rawUrl, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          return data;
+        }
+
+        // Some datasets are {"kata": {...}} (object), some are arrays of objects,
+        // some are {"kata": "def"}. We extract keys + normalize to string list.
+        if (data && typeof data === "object") {
+          // 1) object map: {"kata": ...}
+          if (!Array.isArray(Object.values(data)[0])) {
+            return Object.keys(data);
+          }
+        }
+
+        // If payload not recognized, skip.
+        return null;
+      } catch (e) {
+        console.warn("Failed fetch kbbi wordlist from:", rawUrl, e);
+      }
+    }
+    return null;
+  }
+
   async _saveToCache(words) {
     try {
       const db = await this._openDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const transaction = db.transaction(STORE_NAME, "readwrite");
         const store = transaction.objectStore(STORE_NAME);
         const request = store.put(words, KEY_NAME);
 
@@ -180,7 +258,7 @@ export class Dictionary {
         request.onerror = () => reject(request.error);
       });
     } catch (e) {
-      console.warn('Failed to cache dictionary:', e);
+      console.warn("Failed to cache dictionary:", e);
     }
   }
 }

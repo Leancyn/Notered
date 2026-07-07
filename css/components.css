@@ -202,8 +202,29 @@
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
+@media (min-width: 1024px) {
+  .bottom-sheet {
+    left: 50%;
+    right: auto;
+    max-width: 480px;
+    transform: translate(-50%, 100%);
+    border-radius: 20px;
+    box-shadow: 0 8px 40px var(--shadow-lg);
+  }
+
+  .bottom-sheet.active {
+    transform: translate(-50%, 0);
+  }
+}
+
 .bottom-sheet.active {
   transform: translateY(0);
+}
+
+@media (min-width: 1024px) {
+  .bottom-sheet.active {
+    transform: translate(-50%, -20px);
+  }
 }
 
 .bottom-sheet-handle {
@@ -396,4 +417,121 @@
   width: 48px;
   height: 48px;
   fill: var(--text-muted);
+}
+
+/* ====================================================
+   DESKTOP OVERRIDES (≥1024px)
+   Keeps horizontal bottom nav but centers everything
+   ==================================================== */
+@media (min-width: 1024px) {
+  /* Keep the bottom tab bar but make it horizontal still,
+     just centered and sleeker on desktop */
+  .bottom-tab-bar {
+    max-width: 480px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -2px 16px var(--shadow-lg);
+    bottom: 16px;
+    height: 56px;
+    width: auto;
+    padding: 0 8px;
+    gap: 0;
+  }
+
+  .tab-item {
+    padding: 4px 10px;
+    gap: 2px;
+    font-size: 0.65rem;
+    border-radius: 12px;
+    transition: background-color 0.2s, color 0.2s;
+  }
+
+  .tab-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .tab-item svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Remove bottom safe padding since tab bar floats above */
+  .safe-padding-bottom {
+    padding-bottom: 80px !important;
+  }
+
+  /* Center and constrain all view panels */
+  .view-panel.active {
+    display: flex;
+    justify-content: center;
+  }
+
+  #view-tulis.view-panel.active {
+    display: block;
+  }
+
+  #view-tulis .editor-container {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+
+  #view-tulis .editor-area {
+    min-height: 400px;
+  }
+
+  /* Center sketch tab */
+  .sketch-container {
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  /* Center draft tab */
+  #view-draft > div {
+    max-width: 700px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  /* Draft list in 2 columns */
+  #drafts-list-container {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* Settings as centered modal */
+  .settings-panel {
+    left: 50% !important;
+    right: auto !important;
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) scale(0.95) !important;
+    max-width: 420px;
+    max-height: 80vh;
+    height: auto;
+    border-radius: 20px;
+    padding: 28px 24px;
+    box-shadow: 0 20px 60px var(--shadow-lg);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s, transform 0.3s !important;
+  }
+
+  .settings-panel.active {
+    transform: translate(-50%, -50%) scale(1) !important;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  #settings-overlay {
+    z-index: 199;
+  }
+
+  /* Sketch grid more columns */
+  .sketch-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
 }

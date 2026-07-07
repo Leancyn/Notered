@@ -8,6 +8,7 @@
 import { SpellChecker } from "./spellcheck.js";
 import { Stats } from "./stats.js";
 import { Storage } from "./storage.js";
+import { normalizeForSpellcheck } from "./puebi-normalize.js";
 
 export class Editor {
   /**
@@ -30,6 +31,10 @@ export class Editor {
     this._isProcessing = false;
     this._lastText = "";
     this._spellResults = new Map(); // word -> check result
+
+    // Cursor/DOM safety: contenteditable may represent Enter as <div>/<br>.
+    // We skip one spellcheck rebuild after Enter to avoid double line breaks.
+    this._skipNextProcessOnce = false;
 
     this._init();
   }
@@ -62,6 +67,11 @@ export class Editor {
     // to jump / trigger extra line breaks on some browsers.
     this.el.addEventListener("keydown", (e) => {
       this._handleShortcuts(e);
+
+      if (e.key === "Enter") {
+        this._skipNextProcessOnce = true;
+      }
+
       if (e.key === " ") {
         this._handleAutoCorrect(e);
       }
@@ -81,6 +91,15 @@ export class Editor {
 
   /** Handle text input with debounced spell check */
   _onInput() {
+    // If we just pressed Enter, skip one spellcheck rebuild cycle
+    // to prevent Enter <div>/<br> roundtrips from creating extra lines.
+    if (this._skipNextProcessOnce) {
+      this._skipNextProcessOnce = false;
+      // Still update stats immediately based on current plain text.
+      this._updateStatsQuick();
+      return;
+    }
+
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => {
       this._processText();
@@ -116,15 +135,22 @@ export class Editor {
     this._isProcessing = true;
 
     try {
-      const text = this.getPlainText();
-      if (text === this._lastText) {
+      // Normalize text with lightweight PUEBI rules before tokenization/spellcheck.
+      // Cursor safety: we compute spellcheck highlights from normalized text,
+      // but we restore cursor using offsets against the editor's current text.
+      const normalizedText = normalizeForSpellcheck(this.getPlainText());
+      if (normalizedText === this._lastText) {
         this._isProcessing = false;
         return;
       }
-      this._lastText = text;
+      this._lastText = normalizedText;
 
-      // Save cursor position
-      const savedSelection = this._saveSelection();
+      // Save cursor position BEFORE we mutate innerHTML.
+      // Also disable selection saving for very short texts to avoid DOM reflow glitches.
+      const savedSelection = this.getPlainText().length > 0 ? this._saveSelection() : null;
+
+      // Use normalized text for tokenization/highlights, but keep selection restoration stable.
+      const text = normalizedText;
 
       // Tokenize and check each word
       const lines = text.split("\n");
@@ -201,7 +227,7 @@ export class Editor {
       // Restore cursor position
       this._restoreSelection(savedSelection);
 
-      // Update stats
+      // Update stats (use normalized text for PUEBI-consistent counts)
       const accuracy = totalChecked > 0 ? Math.round((correctCount / totalChecked) * 100) : 100;
       const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
 
@@ -509,11 +535,15 @@ export class Editor {
     // We only autocorrect if we are typing inside a text node
     if (container.nodeType !== Node.TEXT_NODE) return;
 
+    // Cursor safety under PUEBI: normalize the slice we analyze,
+    // but DO NOT mutate DOM here (autocorrect already mutates only the word).
     const text = container.textContent;
     const textBeforeCursor = text.substring(0, offset);
 
-    // Grab the last word typed right before cursor
-    const match = textBeforeCursor.match(/([\p{L}\p{N}'-]+)$/u);
+    const normalizedBeforeCursor = normalizeForSpellcheck(textBeforeCursor);
+
+    // Grab the last word typed right before cursor (from normalized slice)
+    const match = normalizedBeforeCursor.match(/([\p{L}\p{N}'-]+)$/u);
     if (!match) return;
 
     const lastWord = match[1];
@@ -527,16 +557,20 @@ export class Editor {
     if (checkResult.type === "tidak_baku" && checkResult.bakuForm) {
       correction = checkResult.bakuForm;
     } else if (checkResult.type === "error" && checkResult.suggestions && checkResult.suggestions.length > 0) {
-      // Auto-correct spelling errors ONLY if the first suggestion is very close (Levenshtein = 1)
+      // Auto-correct spelling errors ONLY if the best suggestion is very close.
+      // Use Damerau-Levenshtein to better handle transposition typos.
       const bestSuggestion = checkResult.suggestions[0];
-      const dist = this.spellChecker.levenshteinDistance(lastWord.toLowerCase(), bestSuggestion);
-      if (dist === 1) {
+      const dist = this.spellChecker.damerauDistance(lastWord.toLowerCase(), bestSuggestion);
+      if (dist <= 1) {
         correction = bestSuggestion;
       }
     }
 
     if (correction) {
-      // Find start offset of this word in the text node
+      // Find start offset of this word in the original (unnormalized) node.
+      // We recompute using normalized slice length, then map back approximately.
+      // Since normalizeForSpellcheck only adjusts whitespace around punctuation,
+      // and autocorrect triggers on space, this mapping remains stable.
       const wordStartOffset = offset - lastWord.length;
 
       // Select the word to replace

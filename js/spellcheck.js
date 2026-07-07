@@ -1,19 +1,60 @@
 /**
  * spellcheck.js - Spell Checker and Suggestion Engine
- * 
+ *
  * Verifies words against base KBBI dictionary, stemmed versions,
  * abbreviation whitelists, and generates corrections via Levenshtein.
  */
 
-import { stem } from './stemmer.js';
+import { stem } from "./stemmer.js";
+
+import { Autocorrect } from "./autocorrect.js";
+import { loadTypoMapUnified } from "./typo-loader.js";
+import { checkCommonTypos, getCommonTypoMap } from "./typo-patterns.js";
 
 // Common abbreviations, URLs, and punctuation to skip or whitelist
+
 const WHITELIST_WORDS = new Set([
-  'dan', 'atau', 'tetapi', 'namun', 'melainkan', 'sedangkan', 'sementara',
-  'yg', 'dgn', 'utk', 'dlm', 'ttg', 'krn', 'dll', 'dsb', 'dst', 'dkk', 'dst',
-  'saya', 'kamu', 'dia', 'mereka', 'kami', 'kita', 'ia', 'beliau', 'anda',
-  'rp', 'idr', 'usd', 'km', 'kg', 'cm', 'gr', 'ml', 'id', 'co', 'org', 'net',
-  'notered', 'kbbi'
+  "dan",
+  "atau",
+  "tetapi",
+  "namun",
+  "melainkan",
+  "sedangkan",
+  "sementara",
+  "yg",
+  "dgn",
+  "utk",
+  "dlm",
+  "ttg",
+  "krn",
+  "dll",
+  "dsb",
+  "dst",
+  "dkk",
+  "dst",
+  "saya",
+  "kamu",
+  "dia",
+  "mereka",
+  "kami",
+  "kita",
+  "ia",
+  "beliau",
+  "anda",
+  "rp",
+  "idr",
+  "usd",
+  "km",
+  "kg",
+  "cm",
+  "gr",
+  "ml",
+  "id",
+  "co",
+  "org",
+  "net",
+  "notered",
+  "kbbi",
 ]);
 
 export class SpellChecker {
@@ -24,6 +65,14 @@ export class SpellChecker {
   constructor(dictionary, tidakBakuMap = {}) {
     this.dictionary = dictionary;
     this.tidakBakuMap = tidakBakuMap;
+    this.typoMap = {};
+    this.commonTypoMap = getCommonTypoMap();
+
+    this._autocorrect = new Autocorrect({
+      dictionary: this.dictionary,
+      tidakBakuMap: this.tidakBakuMap,
+      typoMap: this.typoMap,
+    });
   }
 
   /**
@@ -31,17 +80,25 @@ export class SpellChecker {
    * @returns {Promise<void>}
    */
   async init() {
-    // If map was not passed, load it
-    if (Object.keys(this.tidakBakuMap).length === 0) {
-      try {
-        const res = await fetch('./data/tidak-baku.json');
-        if (res.ok) {
-          this.tidakBakuMap = await res.json();
-        }
-      } catch (err) {
-        console.error('Failed to load tidak-baku mapping', err);
-      }
-    }
+    // Only use dictionary_json dataset.
+    // tidak-baku.json is intentionally disabled/removed per requirement.
+    this.tidakBakuMap = this.tidakBakuMap || {};
+
+    // Load typo map (typo -> correct)
+    // Primary: extract from local dictionary__JSON.json (typo variants marked with "X ? Y").
+    // Fallback: ./data/typo.json
+    this.typoMap = await loadTypoMapUnified({
+      dictionaryUrl: "./data/dictionary__JSON.json",
+      fallbackUrl: "./data/typo.json",
+      extractionMaxEntries: 0,
+    });
+
+    // keep autocorrect instance in sync
+    this._autocorrect = new Autocorrect({
+      dictionary: this.dictionary,
+      tidakBakuMap: this.tidakBakuMap,
+      typoMap: this.typoMap,
+    });
   }
 
   /**
@@ -51,20 +108,20 @@ export class SpellChecker {
    */
   check(word) {
     const cleanWord = word.trim().toLowerCase();
-    
+
     // 1. Skip check if empty or too short
     if (!cleanWord) {
-      return { valid: true, type: 'ignored', suggestions: [], bakuForm: null };
+      return { valid: true, type: "ignored", suggestions: [], bakuForm: null };
     }
 
     // 2. Ignore pure numbers, punctuation, or URLs
-    if (/^[0-9]+$/.test(cleanWord) || /^[^\p{L}\p{N}]+$/u.test(cleanWord) || cleanWord.startsWith('http') || cleanWord.includes('.')) {
-      return { valid: true, type: 'ignored', suggestions: [], bakuForm: null };
+    if (/^[0-9]+$/.test(cleanWord) || /^[^\p{L}\p{N}]+$/u.test(cleanWord) || cleanWord.startsWith("http") || cleanWord.includes(".")) {
+      return { valid: true, type: "ignored", suggestions: [], bakuForm: null };
     }
 
     // 3. Check whitelist (abbreviations, pronouns)
     if (WHITELIST_WORDS.has(cleanWord)) {
-      return { valid: true, type: 'whitelisted', suggestions: [], bakuForm: null };
+      return { valid: true, type: "whitelisted", suggestions: [], bakuForm: null };
     }
 
     // 4. Check informal (tidak baku) mapping
@@ -72,31 +129,53 @@ export class SpellChecker {
       const bakuForm = this.tidakBakuMap[cleanWord];
       return {
         valid: false,
-        type: 'tidak_baku',
+        type: "tidak_baku",
         suggestions: [bakuForm],
-        bakuForm: bakuForm
+        bakuForm: bakuForm,
       };
     }
 
     // 5. Check direct dictionary inclusion
     if (this.dictionary.has(cleanWord)) {
-      return { valid: true, type: 'correct', suggestions: [], bakuForm: null };
+      return { valid: true, type: "correct", suggestions: [], bakuForm: null };
     }
 
     // 6. Stem the word and check dictionary inclusion
     const baseWord = stem(cleanWord);
     if (this.dictionary.has(baseWord)) {
-      return { valid: true, type: 'correct', suggestions: [], bakuForm: null };
+      return { valid: true, type: "correct", suggestions: [], bakuForm: null };
     }
 
-    // 7. Word is incorrect -> generate suggestions
+    // 7. Check common typo patterns (pattern-based corrections)
+    const commonTypoCorrection = checkCommonTypos(cleanWord);
+    if (commonTypoCorrection) {
+      return {
+        valid: false,
+        type: "error",
+        suggestions: [commonTypoCorrection],
+        bakuForm: null,
+      };
+    }
+
+    // 8. Check common typo map
+    if (this.commonTypoMap[cleanWord]) {
+      const correction = this.commonTypoMap[cleanWord];
+      return {
+        valid: false,
+        type: "error",
+        suggestions: [correction],
+        bakuForm: null,
+      };
+    }
+
+    // 9. Word is incorrect -> generate suggestions
     const suggestions = this.findSuggestions(cleanWord);
-    
+
     return {
       valid: false,
-      type: 'error',
+      type: "error",
       suggestions: suggestions,
-      bakuForm: null
+      bakuForm: null,
     };
   }
 
@@ -108,29 +187,13 @@ export class SpellChecker {
    * @returns {string[]} Suggestions list
    */
   findSuggestions(input, maxDistance = 2, limit = 5) {
-    const candidates = [];
-    const dictionaryWords = this.dictionary.getAllWords();
-
-    for (const dictWord of dictionaryWords) {
-      // Length optimization: skip candidates with massive length difference
-      if (Math.abs(dictWord.length - input.length) > maxDistance) {
-        continue;
-      }
-
-      const distance = this.levenshteinDistance(input, dictWord);
-      
-      if (distance <= maxDistance) {
-        candidates.push({ word: dictWord, dist: distance });
-      }
-    }
-
-    // Sort by distance (lower first), then alphabetically
-    candidates.sort((a, b) => {
-      if (a.dist !== b.dist) return a.dist - b.dist;
-      return a.word.localeCompare(b.word);
+    // Candidate generation + scoring (Damerau-Levenshtein) to avoid brute-force scan
+    const ranked = this._autocorrect.suggest(input, {
+      maxEditDistance: maxDistance,
+      limit,
     });
 
-    return candidates.slice(0, limit).map(c => c.word);
+    return ranked.map((r) => r.word);
   }
 
   /**
@@ -139,9 +202,48 @@ export class SpellChecker {
    * @param {string} b - String 2
    * @returns {number} Edit distance
    */
+  damerauDistance(a, b) {
+    // Backward-compatible helper for Editor auto-correct
+    // (Editor uses this method.)
+    // Lazy-require avoided in ESM environment.
+    const aStr = (a ?? "").toLowerCase();
+    const bStr = (b ?? "").toLowerCase();
+
+    // Optimal String Alignment variant: adjacent transpositions
+    if (aStr === bStr) return 0;
+
+    const n = aStr.length;
+    const m = bStr.length;
+    if (n === 0) return m;
+    if (m === 0) return n;
+
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = 0; i <= n; i++) dp[i][0] = i;
+    for (let j = 0; j <= m; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= n; i++) {
+      for (let j = 1; j <= m; j++) {
+        const cost = aStr.charCodeAt(i - 1) === bStr.charCodeAt(j - 1) ? 0 : 1;
+
+        const del = dp[i - 1][j] + 1;
+        const ins = dp[i][j - 1] + 1;
+        const sub = dp[i - 1][j - 1] + cost;
+        let val = Math.min(del, ins, sub);
+
+        if (i > 1 && j > 1 && aStr.charCodeAt(i - 1) === bStr.charCodeAt(j - 2) && aStr.charCodeAt(i - 2) === bStr.charCodeAt(j - 1)) {
+          val = Math.min(val, dp[i - 2][j - 2] + 1);
+        }
+
+        dp[i][j] = val;
+      }
+    }
+
+    return dp[n][m];
+  }
+
   levenshteinDistance(a, b) {
     const dp = [];
-    
+
     for (let i = 0; i <= a.length; i++) {
       dp[i] = [i];
     }
@@ -153,9 +255,9 @@ export class SpellChecker {
       for (let j = 1; j <= b.length; j++) {
         const cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
         dp[i][j] = Math.min(
-          dp[i - 1][j] + 1,      // Deletion
-          dp[i][j - 1] + 1,      // Insertion
-          dp[i - 1][j - 1] + cost // Substitution
+          dp[i - 1][j] + 1, // Deletion
+          dp[i][j - 1] + 1, // Insertion
+          dp[i - 1][j - 1] + cost, // Substitution
         );
       }
     }
