@@ -1,0 +1,399 @@
+/* 
+ * components.css - Reusable UI Components for Notered
+ * 
+ * Implements iOS-style navigation headers, tab bars, bottom sheets,
+ * capsule buttons, glass cards, and custom toast alerts.
+ */
+
+/* Header - Top Fixed Glass Bar */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--header-height-mobile);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 100;
+  box-shadow: 0 1px 8px var(--shadow);
+}
+
+@media (min-width: 768px) {
+  .app-header {
+    height: var(--header-height-desktop);
+    padding: 0 24px;
+  }
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  fill: var(--text-primary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.icon-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Bottom Tab Bar - iOS Style */
+.bottom-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 100;
+  box-shadow: 0 -1px 8px var(--shadow);
+}
+
+.tab-item {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 3px;
+  transition: color 0.2s;
+}
+
+.tab-item svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.tab-item.active {
+  color: var(--accent-hover);
+}
+
+/* Glass Card */
+.glass-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 4px 16px var(--shadow);
+}
+
+/* Buttons */
+.capsule-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--accent);
+  color: var(--text-primary);
+  border: none;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 12px 24px;
+  border-radius: 99px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(245, 197, 66, 0.25);
+  transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.capsule-btn:hover {
+  background-color: var(--accent-hover);
+  box-shadow: 0 4px 14px rgba(232, 168, 56, 0.35);
+}
+
+.capsule-btn:active {
+  transform: scale(0.97);
+}
+
+.capsule-btn-outline {
+  background-color: transparent;
+  border: 2px solid var(--border);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.capsule-btn-outline:hover {
+  background-color: var(--bg-secondary);
+  box-shadow: none;
+}
+
+/* Bottom Sheet Modal - iOS Style */
+.bottom-sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(61, 46, 28, 0.3);
+  opacity: 0;
+  visibility: hidden;
+  z-index: 199;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.bottom-sheet-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 80%;
+  background: var(--bg-primary);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 24px var(--shadow-lg);
+  z-index: 200;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-sheet.active {
+  transform: translateY(0);
+}
+
+.bottom-sheet-handle {
+  width: 36px;
+  height: 5px;
+  background-color: var(--text-muted);
+  border-radius: 99px;
+  margin: 0 auto 16px auto;
+}
+
+.bottom-sheet-title {
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Toast System */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 340px;
+  z-index: 300;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 24px var(--shadow-lg);
+  margin-bottom: 8px;
+  pointer-events: auto;
+  transform: translateY(-20px);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+}
+
+.toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Pill Badges */
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* Settings Slide Panel */
+.settings-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  max-width: 320px;
+  height: 100%;
+  background: var(--bg-primary);
+  box-shadow: -4px 0 24px var(--shadow-lg);
+  z-index: 200;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-panel.active {
+  transform: translateX(0);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-title {
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.settings-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
+/* Draft Card */
+.draft-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.draft-card:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.draft-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.draft-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.draft-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  gap: 12px;
+}
+
+.empty-state svg {
+  width: 48px;
+  height: 48px;
+  fill: var(--text-muted);
+}

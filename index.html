@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Notered - Asisten Menulis Bahasa Indonesia & Koreksi KBBI</title>
+
+  <!-- SEO Meta Tags -->
+  <meta name="description"
+    content="Notered adalah asisten menulis Bahasa Indonesia per kata berbasis KBBI dengan fitur sketsa referensi kucing yang ramah dan interaktif.">
+  <meta name="author" content="Notered Team">
+  <meta name="theme-color" content="#FFFDF5">
+
+  <!-- iOS PWA meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notered">
+
+  <!-- Core and Features CSS -->
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/editor.css">
+  <link rel="stylesheet" href="css/sketch.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+
+<body>
+
+  <!-- App Loading Screen (Cat Theme) -->
+  <div id="app-loading"
+    style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #FFFDF5; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; transition: opacity 0.5s;">
+    <!-- Cat Walking Animation (Minimal inline SVG) -->
+    <svg width="80" height="80" viewBox="0 0 100 100"
+      style="fill: var(--text-primary); animation: gentleFloat 2s ease-in-out infinite alternate;">
+      <path d="M70,50 C70,39 61,30 50,30 C39,30 30,39 30,50 C30,61 39,70 50,70 C61,70 70,61 70,50 Z"
+        fill="var(--accent)" />
+      <path d="M40,32 L30,15 L25,35 Z" fill="var(--text-primary)" /> <!-- Left Ear -->
+      <path d="M60,32 L70,15 L75,35 Z" fill="var(--text-primary)" /> <!-- Right Ear -->
+      <!-- Paw footprint -->
+      <circle cx="50" cy="50" r="6" fill="var(--text-primary)" />
+      <circle cx="40" cy="40" r="3.5" fill="var(--text-primary)" />
+      <circle cx="50" cy="35" r="3.5" fill="var(--text-primary)" />
+      <circle cx="60" cy="40" r="3.5" fill="var(--text-primary)" />
+    </svg>
+    <div style="margin-top: 16px; font-weight: 800; color: var(--text-primary); font-size: 1.15rem;">Memuat Database
+      KBBI...</div>
+    <div style="margin-top: 4px; font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">meow~ mohon
+      tunggu sebentar</div>
+  </div>
+
+  <!-- iOS-Style Header -->
+  <header class="app-header glass">
+    <div class="logo-container">
+      <!-- Cat sitting with pencil custom logo -->
+      <svg class="logo-icon" viewBox="0 0 24 24">
+        <path
+          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14H7v-2h6v2zm4-4H7v-2h10v2zm0-4H7V6h10v2z" />
+      </svg>
+      <span>Notered</span>
+    </div>
+    <div class="header-actions">
+      <!-- Document actions -->
+      <button class="icon-btn" id="btn-new-doc" title="Tulisan baru">
+        <svg viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+        </svg>
+      </button>
+      <button class="icon-btn" id="btn-export-doc" title="Ekspor atau bagikan">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.3 2.04-.8l7.05 4.12c-.05.22-.09.45-.09.68 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3z" />
+        </svg>
+      </button>
+      <button class="icon-btn" id="btn-settings" title="Pengaturan">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main View Panels (Single Page Application Router) -->
+  <main class="safe-padding-bottom" style="padding-top: var(--header-height-mobile); height: 100%;">
+
+    <!-- Tab 1: Tulis (Text Editor) -->
+    <section id="view-tulis" class="view-panel active" style="height: 100%;">
+      <div class="editor-container">
+        <div class="editor-area-wrapper">
+          <div id="editor-area" class="editor-area" contenteditable="true" placeholder="Ketik tulisanmu di sini, Meow~">
+          </div>
+
+          <!-- Interactive Cat Mascot positioned in editor corner -->
+          <div class="cat-mascot-wrapper" id="cat-mascot">
+            <svg class="cat-mascot-svg" viewBox="0 0 40 40">
+              <!-- Body / Head -->
+              <path d="M12,32 C12,24 15,19 20,19 C25,19 28,24 28,32 Z" fill="var(--cat-cream)" />
+              <circle cx="20" cy="18" r="8" fill="var(--cat-cream)" />
+              <!-- Ears -->
+              <path d="M13,13 L16,7 L19,13 Z" fill="var(--text-primary)" class="twitch-left" />
+              <path d="M27,13 L24,7 L21,13 Z" fill="var(--text-primary)" class="twitch-right" />
+              <path d="M14,12 L16,8 L18,12 Z" fill="var(--cat-pink)" class="twitch-left" />
+              <path d="M26,12 L24,8 L22,12 Z" fill="var(--cat-pink)" class="twitch-right" />
+              <!-- Eyes (Path modified dynamically by script) -->
+              <path id="mascot-eye-left" d="M 15 15 A 1.5 1.5 0 1 1 15 14.9" stroke="var(--text-primary)"
+                stroke-width="1.5" stroke-linecap="round" fill="none" class="animate-blink" />
+              <path id="mascot-eye-right" d="M 25 15 A 1.5 1.5 0 1 1 25 14.9" stroke="var(--text-primary)"
+                stroke-width="1.5" stroke-linecap="round" fill="none" class="animate-blink" />
+              <!-- Nose -->
+              <polygon points="19,17 21,17 20,18.5" fill="var(--cat-pink)" />
+              <!-- Mouth -->
+              <path id="mascot-mouth" d="M 18,20 Q 20,22 22,20" stroke="var(--text-primary)" stroke-width="1"
+                fill="none" />
+              <!-- Tail -->
+              <path d="M28,31 Q 33,32 32,25" stroke="var(--cat-cream)" stroke-width="3" stroke-linecap="round"
+                fill="none" class="animate-tail" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Mini Stats bar at editor bottom -->
+        <div class="editor-stats-bar">
+          <div class="pill-badge" id="stats-words">0 kata</div>
+          <div class="pill-badge" id="stats-accuracy"
+            style="background-color: rgba(109, 191, 115, 0.15); color: var(--text-primary);">100% benar</div>
+          <div class="pill-badge" id="stats-read-time">
+            <svg style="width:12px;height:12px;fill:currentColor;margin-right:2px;" viewBox="0 0 24 24">
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 11H7v-2h4V7h2v6z" />
+            </svg>
+            <span id="stats-read-time-val">&lt; 1 menit</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Sketsa Referensi -->
+    <section id="view-sketsa" class="view-panel" style="height: 100%;">
+      <div class="sketch-container">
+        <!-- Search bar -->
+        <div class="search-wrapper">
+          <svg class="search-icon-prefix" viewBox="0 0 24 24">
+            <path
+              d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+          </svg>
+          <input type="text" id="sketch-search-input" class="search-input" placeholder="Cari sketsa untuk digambar...">
+        </div>
+
+        <!-- Grid of results -->
+        <div id="sketch-results-grid" class="sketch-grid">
+          <div class="empty-state" style="grid-column: 1 / -1;">
+            <!-- Big lens SVG -->
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+            </svg>
+            <p>Ketik kata kunci untuk mencari referensi gambar</p>
+            <p style="font-size:0.8rem;margin-top:2px;">Contoh: kucing, bunga mawar, kelinci</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Draft (Saved files) -->
+    <section id="view-draft" class="view-panel" style="height: 100%;">
+      <div style="padding: 16px; display:flex; flex-direction:column; gap:16px;">
+        <h2 style="font-weight:800; font-size:1.35rem;">Draft Tersimpan</h2>
+        <div id="drafts-list-container" style="display:flex; flex-direction:column; gap:12px;">
+          <!-- Managed dynamically by app.js -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- iOS-Style Bottom Navigation Tab Bar -->
+  <nav class="bottom-tab-bar glass">
+    <button class="tab-item active" data-tab="tulis">
+      <svg viewBox="0 0 24 24">
+        <path
+          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+      </svg>
+      <span>Tulis</span>
+    </button>
+    <button class="tab-item" data-tab="sketsa">
+      <svg viewBox="0 0 24 24">
+        <path
+          d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
+      </svg>
+      <span>Sketsa</span>
+    </button>
+    <button class="tab-item" data-tab="draft">
+      <svg viewBox="0 0 24 24">
+        <path
+          d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+      </svg>
+      <span>Draft</span>
+    </button>
+  </nav>
+
+  <!-- iOS-Style Slide-Up Bottom Sheet Modal for Spelling Corrections -->
+  <div class="bottom-sheet-overlay" id="bottom-sheet-overlay"></div>
+  <div class="bottom-sheet" id="bottom-sheet">
+    <div class="bottom-sheet-handle"></div>
+    <div class="bottom-sheet-title">Kata: "mnulis"</div>
+    <div class="bottom-sheet-subtitle" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:14px;">Kata
+      tidak ditemukan di KBBI.</div>
+    <div class="bottom-sheet-content">
+      <!-- Injected dynamically by ui.js -->
+    </div>
+  </div>
+
+  <!-- Settings Slide Panel from right -->
+  <div class="bottom-sheet-overlay" id="settings-overlay" style="z-index: 199;"></div>
+  <div class="settings-panel" id="settings-panel">
+    <div class="settings-header">
+      <h3 class="settings-title">Pengaturan</h3>
+      <button class="icon-btn" id="btn-close-settings">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-label" for="settings-unsplash-key">Unsplash API Key (Untuk Cari Gambar)</label>
+      <input type="password" id="settings-unsplash-key" class="settings-input"
+        placeholder="Masukkan Client ID Unsplash...">
+      <p style="font-size:0.75rem;color:var(--text-secondary);line-height:1.4;">Bisa dikosongkan. Jika kosong, akan
+        menggunakan demo placeholder secara offline.</p>
+    </div>
+
+    <div class="settings-group">
+      <label class="settings-label" for="settings-font-size">Ukuran Font Editor (px)</label>
+      <input type="number" id="settings-font-size" class="settings-input" min="12" max="28" value="16">
+    </div>
+
+    <div class="settings-group" style="flex-direction: row; justify-content: space-between; align-items: center;">
+      <label class="settings-label" for="settings-autocorrect" style="cursor:pointer;">Koreksi Otomatis
+        (Auto-Correct)</label>
+      <input type="checkbox" id="settings-autocorrect"
+        style="width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer;" checked>
+    </div>
+
+    <div class="settings-group" style="margin-top:auto;">
+      <button class="capsule-btn capsule-btn-outline" id="settings-clear-cache"
+        style="color:var(--error);border-color:var(--error);">
+        Hapus Semua Data & Cache
+      </button>
+    </div>
+  </div>
+
+  <!-- Full Screen Sketch Reference Converter Modal -->
+  <div class="sketch-modal-overlay" id="sketch-modal-overlay">
+    <div class="sketch-modal">
+      <div class="sketch-modal-header">
+        <h3 class="sketch-modal-title">Sketsa Referensi</h3>
+        <button class="icon-btn" id="btn-close-sketch">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Tab toggle: Original vs Sketch -->
+      <div class="sketch-modal-tabs">
+        <button class="sketch-modal-tab" id="tab-show-original">Foto Asli</button>
+        <button class="sketch-modal-tab active" id="tab-show-sketch">Sketsa</button>
+      </div>
+
+      <!-- Canvas preview area -->
+      <div class="sketch-modal-body" id="sketch-preview-container">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Blur detail slider controls -->
+      <div class="sketch-modal-footer">
+        <div class="slider-group">
+          <div class="slider-label-row">
+            <span>Tingkat Detail Sketsa</span>
+            <span id="slider-blur-val">10</span>
+          </div>
+          <input type="range" id="sketch-blur-slider" class="sketch-slider" min="1" max="25" value="10"
+            oninput="document.getElementById('slider-blur-val').textContent=this.value">
+        </div>
+        <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.4; text-align:center;">
+          Gambar disediakan oleh <a id="sketch-author-link" href="#" target="_blank"
+            style="color:var(--accent-hover);font-weight:700;">Unsplash</a>
+        </p>
+        <button class="capsule-btn" id="btn-download-sketch">
+          <svg style="width:18px;height:18px;fill:currentColor;" viewBox="0 0 24 24">
+            <path
+              d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
+          </svg>
+          Download Gambar Sketsa (PNG)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load main logic as ES module -->
+  <script type="module" src="js/app.js"></script>
+</body>
+
+</html>

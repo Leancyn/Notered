@@ -1,0 +1,294 @@
+/* 
+ * sketch.css - Sketch Tab & Reference Image Conversion View
+ * 
+ * Styles the search input, grid gallery, image detail preview, 
+ * canvas wrapper, and control sliders for edge detection.
+ */
+
+.sketch-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+@media (min-width: 768px) {
+  .sketch-container {
+    padding: 24px;
+  }
+}
+
+.search-wrapper {
+  position: relative;
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(139, 109, 56, 0.03);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), inset 0 2px 4px rgba(139, 109, 56, 0.03);
+}
+
+.search-icon-prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  fill: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* Image Grid Gallery */
+.sketch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 640px) {
+  .sketch-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sketch-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.sketch-card {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px var(--shadow);
+  cursor: pointer;
+  background-color: var(--bg-secondary);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.sketch-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 109, 56, 0.12);
+}
+
+.sketch-card:active {
+  transform: scale(0.97);
+}
+
+.sketch-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sketch-card-author {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 8px;
+  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+  color: #FFF;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sketch Conversion Overlay Modal */
+.sketch-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(61, 46, 28, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.sketch-modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sketch-modal {
+  width: 95%;
+  max-width: 600px;
+  height: 90%;
+  max-height: 700px;
+  background: var(--bg-primary);
+  border-radius: 20px;
+  box-shadow: 0 12px 36px var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sketch-modal-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sketch-modal-title {
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+/* Tabs: Foto Asli / Sketsa */
+.sketch-modal-tabs {
+  display: flex;
+  justify-content: center;
+  background-color: var(--bg-secondary);
+  padding: 6px;
+  margin: 12px 16px;
+  border-radius: 99px;
+  gap: 4px;
+}
+
+.sketch-modal-tab {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  background: none;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.sketch-modal-tab.active {
+  background-color: var(--accent);
+  color: var(--text-primary);
+  box-shadow: 0 2px 6px rgba(245, 197, 66, 0.15);
+}
+
+/* Preview Canvas Area */
+.sketch-modal-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-secondary);
+  margin: 0 16px;
+  border-radius: 14px;
+  border: 1px dashed var(--border);
+  overflow: hidden;
+  position: relative;
+  padding: 12px;
+}
+
+.sketch-modal-body img, .sketch-modal-body canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.sketch-progress-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background-color: var(--bg-glass);
+  padding: 16px 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px var(--shadow);
+  z-index: 10;
+}
+
+.sketch-progress-bar-bg {
+  width: 120px;
+  height: 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.sketch-progress-bar-fill {
+  width: 0%;
+  height: 100%;
+  background-color: var(--accent);
+  transition: width 0.1s;
+}
+
+/* Adjustments controls */
+.sketch-modal-footer {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.sketch-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 99px;
+  background-color: var(--bg-secondary);
+  outline: none;
+}
+
+.sketch-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  border: 2px solid #FFF;
+  box-shadow: 0 2px 6px var(--shadow);
+  cursor: pointer;
+}

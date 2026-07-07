@@ -1,0 +1,164 @@
+/* 
+ * editor.css - Editor Component Styling
+ * 
+ * Configures the contenteditable editing zone, wavy outlines for spell check errors,
+ * suggestion dropdowns, and positioning of the interactive cat mascot.
+ */
+
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .editor-container {
+    padding: 24px;
+  }
+}
+
+.editor-area-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-area {
+  flex: 1;
+  width: 100%;
+  min-height: 250px;
+  border-radius: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 20px;
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  outline: none;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-shadow: inset 0 2px 6px rgba(139, 109, 56, 0.04);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.editor-area:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), inset 0 2px 4px rgba(139, 109, 56, 0.04);
+}
+
+/* Empty Placeholder implementation */
+.editor-area[contenteditable]:empty::before {
+  content: attr(placeholder);
+  color: var(--text-muted);
+  font-style: italic;
+  pointer-events: none;
+  display: block;
+}
+
+/* Word highlight rules */
+.word-error {
+  text-decoration: wavy underline var(--error);
+  text-decoration-skip-ink: none;
+  -webkit-text-decoration: wavy underline var(--error);
+  background-color: var(--error-bg);
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0 1px;
+}
+
+.word-warning {
+  text-decoration: dotted underline var(--warning);
+  text-decoration-skip-ink: none;
+  -webkit-text-decoration: dotted underline var(--warning);
+  background-color: rgba(240, 160, 80, 0.08);
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0 1px;
+}
+
+/* Suggestion Dropdown/Popup (Desktop Mode) */
+.suggestion-popup {
+  position: absolute;
+  z-index: 150;
+  min-width: 180px;
+  max-width: 240px;
+  background: var(--bg-primary);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--shadow-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.suggestion-item {
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.2s;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.suggestion-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Mascot - interactive cat */
+.cat-mascot-wrapper {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.9;
+  transition: transform 0.2s;
+}
+
+@media (min-width: 768px) {
+  .cat-mascot-wrapper {
+    width: 76px;
+    height: 76px;
+    bottom: 30px;
+    right: 30px;
+  }
+}
+
+.cat-mascot-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Stats view bar inside editor view */
+.editor-stats-bar {
+  display: flex;
+  justify-content: space-around;
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  margin-top: 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
