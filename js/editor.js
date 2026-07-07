@@ -1,13 +1,13 @@
 /**
  * editor.js - Text Editor Module for Notered
- * 
+ *
  * Manages the contenteditable text area with real-time spell checking,
  * word-by-word highlighting, and suggestion popup interaction.
  */
 
-import { SpellChecker } from './spellcheck.js';
-import { Stats } from './stats.js';
-import { Storage } from './storage.js';
+import { SpellChecker } from "./spellcheck.js";
+import { Stats } from "./stats.js";
+import { Storage } from "./storage.js";
 
 export class Editor {
   /**
@@ -23,43 +23,46 @@ export class Editor {
     this.el = editorEl;
     this.spellChecker = spellChecker;
     this.callbacks = callbacks;
-    
+
     this.autoCorrect = true;
     this._debounceTimer = null;
     this._autoSaveTimer = null;
     this._isProcessing = false;
-    this._lastText = '';
+    this._lastText = "";
     this._spellResults = new Map(); // word -> check result
-    
+
     this._init();
   }
 
   /** Initialize editor event listeners */
   _init() {
     // Input handling with debounced spell check
-    this.el.addEventListener('input', () => {
+    this.el.addEventListener("input", () => {
       this._onInput();
     });
 
     // Handle paste - strip formatting
-    this.el.addEventListener('paste', (e) => {
+    this.el.addEventListener("paste", (e) => {
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-      document.execCommand('insertText', false, text);
+      const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+      document.execCommand("insertText", false, text);
     });
 
     // Click on words for suggestions
-    this.el.addEventListener('click', (e) => {
-      const wordSpan = e.target.closest('.word-error, .word-warning');
+    this.el.addEventListener("click", (e) => {
+      const wordSpan = e.target.closest(".word-error, .word-warning");
       if (wordSpan) {
         this._onWordClick(wordSpan, e);
       }
     });
 
     // Keyboard shortcuts and Autocorrect triggers
-    this.el.addEventListener('keydown', (e) => {
+    // NOTE: We intentionally do NOT run autocorrect on Enter.
+    // Autocorrect mutates DOM inside contenteditable and may cause the cursor
+    // to jump / trigger extra line breaks on some browsers.
+    this.el.addEventListener("keydown", (e) => {
       this._handleShortcuts(e);
-      if (e.key === ' ' || e.key === 'Enter') {
+      if (e.key === " ") {
         this._handleAutoCorrect(e);
       }
     });
@@ -68,11 +71,11 @@ export class Editor {
     this._startAutoSave();
 
     // Focus management
-    this.el.addEventListener('focus', () => {
-      this.el.classList.add('editor-focused');
+    this.el.addEventListener("focus", () => {
+      this.el.classList.add("editor-focused");
     });
-    this.el.addEventListener('blur', () => {
-      this.el.classList.remove('editor-focused');
+    this.el.addEventListener("blur", () => {
+      this.el.classList.remove("editor-focused");
     });
   }
 
@@ -90,19 +93,19 @@ export class Editor {
   /** Quick stats update without full spell check */
   _updateStatsQuick() {
     const text = this.getPlainText();
-    const words = text.split(/\s+/).filter(w => w.length > 0);
+    const words = text.split(/\s+/).filter((w) => w.length > 0);
     if (this.callbacks.onStatsUpdate) {
       this.callbacks.onStatsUpdate({
         words: words.length,
         chars: text.length,
-        charsNoSpace: text.replace(/\s/g, '').length,
+        charsNoSpace: text.replace(/\s/g, "").length,
         sentences: (text.match(/[.!?]+/g) || []).length || (text.length > 0 ? 1 : 0),
-        paragraphs: text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length || (text.length > 0 ? 1 : 0),
+        paragraphs: text.split(/\n\s*\n/).filter((p) => p.trim().length > 0).length || (text.length > 0 ? 1 : 0),
         correctWords: 0,
         errorWords: 0,
         warningWords: 0,
         accuracy: 100,
-        readTime: Math.ceil(words.length / 200) > 0 ? Math.ceil(words.length / 200) + ' menit' : '< 1 menit'
+        readTime: Math.ceil(words.length / 200) > 0 ? Math.ceil(words.length / 200) + " menit" : "< 1 menit",
       });
     }
   }
@@ -124,8 +127,8 @@ export class Editor {
       const savedSelection = this._saveSelection();
 
       // Tokenize and check each word
-      const lines = text.split('\n');
-      let html = '';
+      const lines = text.split("\n");
+      let html = "";
       let totalChecked = 0;
       let correctCount = 0;
       let errorCount = 0;
@@ -133,10 +136,10 @@ export class Editor {
       const results = [];
 
       for (let i = 0; i < lines.length; i++) {
-        if (i > 0) html += '<br>';
+        if (i > 0) html += "<br>";
         const line = lines[i];
-        if (line.trim() === '') {
-          html += '<br>';
+        if (line.trim() === "") {
+          html += "<br>";
           continue;
         }
 
@@ -148,11 +151,11 @@ export class Editor {
             html += token;
             continue;
           }
-          if (token === '') continue;
+          if (token === "") continue;
 
           // Extract punctuation around word
           const match = token.match(/^([^\p{L}\p{N}]*)([\p{L}\p{N}][\p{L}\p{N}'-]*[\p{L}\p{N}]|[\p{L}\p{N}])([^\p{L}\p{N}]*)$/u);
-          
+
           if (!match) {
             // Pure punctuation or special chars
             html += this._escapeHtml(token);
@@ -161,28 +164,28 @@ export class Editor {
 
           const [, before, word, after] = match;
           const result = this.spellChecker.check(word);
-          
+
           this._spellResults.set(word.toLowerCase(), result);
 
           // Count stats
-          if (result.type !== 'ignored') {
+          if (result.type !== "ignored") {
             totalChecked++;
-            if (result.type === 'correct' || result.type === 'whitelisted') {
+            if (result.type === "correct" || result.type === "whitelisted") {
               correctCount++;
-            } else if (result.type === 'error') {
+            } else if (result.type === "error") {
               errorCount++;
-              results.push({ word, type: 'error', suggestions: result.suggestions });
-            } else if (result.type === 'tidak_baku') {
+              results.push({ word, type: "error", suggestions: result.suggestions });
+            } else if (result.type === "tidak_baku") {
               warningCount++;
-              results.push({ word, type: 'tidak_baku', suggestions: result.suggestions, bakuForm: result.bakuForm });
+              results.push({ word, type: "tidak_baku", suggestions: result.suggestions, bakuForm: result.bakuForm });
             }
           }
 
           html += this._escapeHtml(before);
 
-          if (result.type === 'error') {
+          if (result.type === "error") {
             html += `<span class="word-error" data-word="${this._escapeAttr(word)}" data-suggestions='${JSON.stringify(result.suggestions)}' title="Kata tidak ditemukan">${this._escapeHtml(word)}</span>`;
-          } else if (result.type === 'tidak_baku') {
+          } else if (result.type === "tidak_baku") {
             html += `<span class="word-warning" data-word="${this._escapeAttr(word)}" data-baku="${this._escapeAttr(result.bakuForm)}" data-suggestions='${JSON.stringify(result.suggestions)}' title="Kata tidak baku, gunakan: ${result.bakuForm}">${this._escapeHtml(word)}</span>`;
           } else {
             html += this._escapeHtml(word);
@@ -200,36 +203,35 @@ export class Editor {
 
       // Update stats
       const accuracy = totalChecked > 0 ? Math.round((correctCount / totalChecked) * 100) : 100;
-      const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-      
+      const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
+
       if (this.callbacks.onStatsUpdate) {
         this.callbacks.onStatsUpdate({
           words: wordCount,
           chars: text.length,
-          charsNoSpace: text.replace(/\s/g, '').length,
+          charsNoSpace: text.replace(/\s/g, "").length,
           sentences: (text.match(/[.!?]+/g) || []).length || (text.length > 0 ? 1 : 0),
-          paragraphs: text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length || (text.length > 0 ? 1 : 0),
+          paragraphs: text.split(/\n\s*\n/).filter((p) => p.trim().length > 0).length || (text.length > 0 ? 1 : 0),
           correctWords: correctCount,
           errorWords: errorCount,
           warningWords: warningCount,
           accuracy: accuracy,
-          readTime: Math.ceil(wordCount / 200) > 0 ? Math.ceil(wordCount / 200) + ' menit' : '< 1 menit'
+          readTime: Math.ceil(wordCount / 200) > 0 ? Math.ceil(wordCount / 200) + " menit" : "< 1 menit",
         });
       }
 
       // Update mascot mood
       if (this.callbacks.onMascotUpdate) {
         if (errorCount === 0 && wordCount > 0) {
-          this.callbacks.onMascotUpdate('happy');
+          this.callbacks.onMascotUpdate("happy");
         } else if (errorCount > 5) {
-          this.callbacks.onMascotUpdate('worried');
+          this.callbacks.onMascotUpdate("worried");
         } else {
-          this.callbacks.onMascotUpdate('neutral');
+          this.callbacks.onMascotUpdate("neutral");
         }
       }
-
     } catch (err) {
-      console.error('Editor processText error:', err);
+      console.error("Editor processText error:", err);
     } finally {
       this._isProcessing = false;
     }
@@ -238,10 +240,10 @@ export class Editor {
   /** Handle click on error/warning word */
   _onWordClick(wordSpan, event) {
     const word = wordSpan.dataset.word;
-    const suggestions = JSON.parse(wordSpan.dataset.suggestions || '[]');
+    const suggestions = JSON.parse(wordSpan.dataset.suggestions || "[]");
     const bakuForm = wordSpan.dataset.baku || null;
-    const type = wordSpan.classList.contains('word-error') ? 'error' : 'tidak_baku';
-    
+    const type = wordSpan.classList.contains("word-error") ? "error" : "tidak_baku";
+
     const rect = wordSpan.getBoundingClientRect();
 
     if (this.callbacks.onWordClick) {
@@ -253,7 +255,7 @@ export class Editor {
         rect,
         element: wordSpan,
         replaceWith: (newWord) => this._replaceWord(wordSpan, newWord),
-        replaceAll: (oldWord, newWord) => this._replaceAllWords(oldWord, newWord)
+        replaceAll: (oldWord, newWord) => this._replaceAllWords(oldWord, newWord),
       });
     }
   }
@@ -262,11 +264,11 @@ export class Editor {
   _replaceWord(wordSpan, newWord) {
     const textNode = document.createTextNode(newWord);
     wordSpan.replaceWith(textNode);
-    
+
     // Re-process to update highlights
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => {
-      this._lastText = ''; // Force reprocess
+      this._lastText = ""; // Force reprocess
       this._processText();
     }, 100);
   }
@@ -274,7 +276,7 @@ export class Editor {
   /** Replace all instances of a word */
   _replaceAllWords(oldWord, newWord) {
     const spans = this.el.querySelectorAll(`[data-word="${oldWord}"]`);
-    spans.forEach(span => {
+    spans.forEach((span) => {
       const textNode = document.createTextNode(newWord);
       span.replaceWith(textNode);
     });
@@ -282,7 +284,7 @@ export class Editor {
     // Re-process
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => {
-      this._lastText = '';
+      this._lastText = "";
       this._processText();
     }, 100);
   }
@@ -309,22 +311,19 @@ export class Editor {
     if (!sel) return;
 
     let charCount = 0;
-    let startNode = null, startOffset = 0;
-    let endNode = null, endOffset = 0;
+    let startNode = null,
+      startOffset = 0;
+    let endNode = null,
+      endOffset = 0;
     const targetStart = saved.offset;
     const targetEnd = saved.offset + saved.length;
 
-    const walker = document.createTreeWalker(
-      this.el,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false
-    );
+    const walker = document.createTreeWalker(this.el, NodeFilter.SHOW_TEXT, null, false);
 
     let node;
     while ((node = walker.nextNode())) {
       const nodeLen = node.textContent.length;
-      
+
       if (!startNode && charCount + nodeLen >= targetStart) {
         startNode = node;
         startOffset = targetStart - charCount;
@@ -341,10 +340,7 @@ export class Editor {
       try {
         const range = document.createRange();
         range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
-        range.setEnd(
-          endNode || startNode,
-          Math.min(endOffset || startOffset, (endNode || startNode).textContent.length)
-        );
+        range.setEnd(endNode || startNode, Math.min(endOffset || startOffset, (endNode || startNode).textContent.length));
         sel.removeAllRanges();
         sel.addRange(range);
       } catch (e) {
@@ -356,7 +352,7 @@ export class Editor {
   /** Handle keyboard shortcuts */
   _handleShortcuts(e) {
     // Ctrl+S or Cmd+S - Save
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
       this._saveDraft();
       if (this.callbacks.onSave) {
@@ -378,7 +374,7 @@ export class Editor {
     if (text.trim().length === 0) return;
 
     let draftId = Storage.getActiveDraftId();
-    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+    const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
     const title = this._generateTitle(text);
 
     if (!draftId) {
@@ -393,15 +389,15 @@ export class Editor {
       htmlContent: this.el.innerHTML,
       wordCount,
       updatedAt: Date.now(),
-      createdAt: Storage.loadDraft(draftId)?.createdAt || Date.now()
+      createdAt: Storage.loadDraft(draftId)?.createdAt || Date.now(),
     });
   }
 
   /** Generate draft title from first line */
   _generateTitle(text) {
-    const firstLine = text.split('\n').find(l => l.trim().length > 0) || '';
+    const firstLine = text.split("\n").find((l) => l.trim().length > 0) || "";
     const title = firstLine.trim().substring(0, 50);
-    return title || 'Draft Tanpa Judul';
+    return title || "Draft Tanpa Judul";
   }
 
   /** Get plain text content (no HTML) */
@@ -409,20 +405,20 @@ export class Editor {
     // Clone to avoid modifying the actual editor
     const clone = this.el.cloneNode(true);
     // Replace <br> with newlines
-    clone.querySelectorAll('br').forEach(br => {
-      br.replaceWith('\n');
+    clone.querySelectorAll("br").forEach((br) => {
+      br.replaceWith("\n");
     });
     // Replace block elements with newlines
-    clone.querySelectorAll('div, p').forEach(el => {
-      el.before('\n');
+    clone.querySelectorAll("div, p").forEach((el) => {
+      el.before("\n");
     });
-    return clone.textContent.replace(/^\n/, '') || '';
+    return clone.textContent.replace(/^\n/, "") || "";
   }
 
   /** Set editor content */
   setContent(text) {
     this.el.textContent = text;
-    this._lastText = '';
+    this._lastText = "";
     // Trigger spell check
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => {
@@ -433,24 +429,30 @@ export class Editor {
   /** Set editor HTML content (from saved draft) */
   setHtmlContent(html) {
     this.el.innerHTML = html;
-    this._lastText = '';
+    this._lastText = "";
   }
 
   /** Clear editor content */
   clear() {
-    this.el.innerHTML = '';
-    this._lastText = '';
+    this.el.innerHTML = "";
+    this._lastText = "";
     this._spellResults.clear();
     if (this.callbacks.onStatsUpdate) {
       this.callbacks.onStatsUpdate({
-        words: 0, chars: 0, charsNoSpace: 0,
-        sentences: 0, paragraphs: 0,
-        correctWords: 0, errorWords: 0, warningWords: 0,
-        accuracy: 100, readTime: '< 1 menit'
+        words: 0,
+        chars: 0,
+        charsNoSpace: 0,
+        sentences: 0,
+        paragraphs: 0,
+        correctWords: 0,
+        errorWords: 0,
+        warningWords: 0,
+        accuracy: 100,
+        readTime: "< 1 menit",
       });
     }
     if (this.callbacks.onMascotUpdate) {
-      this.callbacks.onMascotUpdate('neutral');
+      this.callbacks.onMascotUpdate("neutral");
     }
   }
 
@@ -466,7 +468,7 @@ export class Editor {
 
   /** Force re-check all text */
   recheckAll() {
-    this._lastText = '';
+    this._lastText = "";
     this._processText();
   }
 
@@ -478,14 +480,14 @@ export class Editor {
 
   /** Escape HTML entities */
   _escapeHtml(str) {
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
   }
 
   /** Escape attribute value */
   _escapeAttr(str) {
-    return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return str.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
   /** Enable/disable autocorrect option */
@@ -522,9 +524,9 @@ export class Editor {
     if (checkResult.valid) return;
 
     let correction = null;
-    if (checkResult.type === 'tidak_baku' && checkResult.bakuForm) {
+    if (checkResult.type === "tidak_baku" && checkResult.bakuForm) {
       correction = checkResult.bakuForm;
-    } else if (checkResult.type === 'error' && checkResult.suggestions && checkResult.suggestions.length > 0) {
+    } else if (checkResult.type === "error" && checkResult.suggestions && checkResult.suggestions.length > 0) {
       // Auto-correct spelling errors ONLY if the first suggestion is very close (Levenshtein = 1)
       const bestSuggestion = checkResult.suggestions[0];
       const dist = this.spellChecker.levenshteinDistance(lastWord.toLowerCase(), bestSuggestion);

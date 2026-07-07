@@ -1,6 +1,6 @@
 /**
  * ui.js - Main User Interface Controller for Notered
- * 
+ *
  * Manages modal overlays, slide-up bottom sheets, floating settings panels,
  * active tab switching, and animations.
  */
@@ -12,32 +12,32 @@ export class UI {
     this._bottomSheetOverlay = null;
     this._settingsPanel = null;
     this._settingsOverlay = null;
-    
+
     this._initElements();
   }
 
   /** Locate common elements */
   _initElements() {
     // Create toast container dynamically if not exists
-    this._toastContainer = document.getElementById('toast-container');
+    this._toastContainer = document.getElementById("toast-container");
     if (!this._toastContainer) {
-      this._toastContainer = document.createElement('div');
-      this._toastContainer.id = 'toast-container';
-      this._toastContainer.className = 'toast-container';
+      this._toastContainer = document.createElement("div");
+      this._toastContainer.id = "toast-container";
+      this._toastContainer.className = "toast-container";
       document.body.appendChild(this._toastContainer);
     }
 
-    this._bottomSheet = document.getElementById('bottom-sheet');
-    this._bottomSheetOverlay = document.getElementById('bottom-sheet-overlay');
-    this._settingsPanel = document.getElementById('settings-panel');
-    this._settingsOverlay = document.getElementById('settings-overlay');
+    this._bottomSheet = document.getElementById("bottom-sheet");
+    this._bottomSheetOverlay = document.getElementById("bottom-sheet-overlay");
+    this._settingsPanel = document.getElementById("settings-panel");
+    this._settingsOverlay = document.getElementById("settings-overlay");
 
     // Register click handlers for closing overlays
     if (this._bottomSheetOverlay) {
-      this._bottomSheetOverlay.addEventListener('click', () => this.hideBottomSheet());
+      this._bottomSheetOverlay.addEventListener("click", () => this.hideBottomSheet());
     }
     if (this._settingsOverlay) {
-      this._settingsOverlay.addEventListener('click', () => this.hideSettings());
+      this._settingsOverlay.addEventListener("click", () => this.hideSettings());
     }
   }
 
@@ -46,15 +46,15 @@ export class UI {
    * @param {string} message - Text notification message
    * @param {string} type - Toast type ('success' | 'error' | 'info')
    */
-  showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    
+  showToast(message, type = "info") {
+    const toast = document.createElement("div");
+    toast.className = "toast";
+
     // Choose paw/cat SVG icon depending on toast type
-    let iconSvg = '';
-    if (type === 'success') {
+    let iconSvg = "";
+    if (type === "success") {
       iconSvg = `<svg class="toast-icon" style="fill: var(--success)" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`;
-    } else if (type === 'error') {
+    } else if (type === "error") {
       iconSvg = `<svg class="toast-icon" style="fill: var(--error)" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`;
     } else {
       // Default: Cat Paw symbol
@@ -69,12 +69,12 @@ export class UI {
     this._toastContainer.appendChild(toast);
 
     // Trigger transition Reflow
-    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => toast.classList.add("show"), 10);
 
     // Auto delete toast after 3 seconds
     setTimeout(() => {
-      toast.classList.remove('show');
-      toast.addEventListener('transitionend', () => {
+      toast.classList.remove("show");
+      toast.addEventListener("transitionend", () => {
         toast.remove();
       });
     }, 3000);
@@ -92,33 +92,33 @@ export class UI {
   showBottomSheet(options = {}) {
     if (!this._bottomSheet) return;
 
-    const titleEl = this._bottomSheet.querySelector('.bottom-sheet-title');
-    const subtitleEl = this._bottomSheet.querySelector('.bottom-sheet-subtitle');
-    const contentEl = this._bottomSheet.querySelector('.bottom-sheet-content');
+    const titleEl = this._bottomSheet.querySelector(".bottom-sheet-title");
+    const subtitleEl = this._bottomSheet.querySelector(".bottom-sheet-subtitle");
+    const contentEl = this._bottomSheet.querySelector(".bottom-sheet-content");
 
-    if (titleEl) titleEl.textContent = `Kata: "${options.title}"`;
-    if (subtitleEl) subtitleEl.textContent = options.subtitle || '';
+    if (titleEl) titleEl.textContent = `Kata: "${options.title}" (mew~)`;
+    if (subtitleEl) subtitleEl.textContent = options.subtitle || "";
 
     // Build suggestions list UI
-    contentEl.innerHTML = '';
+    contentEl.innerHTML = "";
     if (options.suggestions && options.suggestions.length > 0) {
-      const list = document.createElement('div');
-      list.className = 'suggestion-list';
-      list.style.display = 'flex';
-      list.style.flexDirection = 'column';
-      list.style.gap = '8px';
+      const list = document.createElement("div");
+      list.className = "suggestion-list";
+      list.style.display = "flex";
+      list.style.flexDirection = "column";
+      list.style.gap = "8px";
 
-      options.suggestions.forEach(word => {
-        const item = document.createElement('button');
-        item.className = 'suggestion-item';
-        item.style.textAlign = 'left';
-        item.style.width = '100%';
-        item.style.background = 'none';
-        item.style.border = 'none';
-        item.style.display = 'flex';
-        item.style.justifyContent = 'space-between';
-        item.style.alignItems = 'center';
-        
+      options.suggestions.forEach((word) => {
+        const item = document.createElement("button");
+        item.className = "suggestion-item";
+        item.style.textAlign = "left";
+        item.style.width = "100%";
+        item.style.background = "none";
+        item.style.border = "none";
+        item.style.display = "flex";
+        item.style.justifyContent = "space-between";
+        item.style.alignItems = "center";
+
         item.innerHTML = `
           <div>
             <span class="suggestion-label" style="display:block;">Saran Koreksi</span>
@@ -127,7 +127,7 @@ export class UI {
           <svg style="width:20px;height:20px;fill:var(--accent-hover);" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
         `;
 
-        item.addEventListener('click', () => {
+        item.addEventListener("click", () => {
           if (options.onSelect) options.onSelect(word);
           this.hideBottomSheet();
         });
@@ -136,15 +136,15 @@ export class UI {
       });
 
       // Add "Ganti Semua" option button
-      const replaceAllBtn = document.createElement('button');
-      replaceAllBtn.className = 'capsule-btn capsule-btn-outline';
-      replaceAllBtn.style.marginTop = '12px';
-      replaceAllBtn.style.width = '100%';
+      const replaceAllBtn = document.createElement("button");
+      replaceAllBtn.className = "capsule-btn capsule-btn-outline";
+      replaceAllBtn.style.marginTop = "12px";
+      replaceAllBtn.style.width = "100%";
       replaceAllBtn.innerHTML = `
         <svg style="width:18px;height:18px;fill:currentColor;" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
         Ganti Semua Kata Serupa
       `;
-      replaceAllBtn.addEventListener('click', () => {
+      replaceAllBtn.addEventListener("click", () => {
         if (options.onReplaceAll && options.suggestions.length > 0) {
           options.onReplaceAll(options.suggestions[0]);
         }
@@ -156,35 +156,35 @@ export class UI {
     } else {
       contentEl.innerHTML = `
         <div style="text-align:center;padding:20px;color:var(--text-secondary);">
-          <p>Tidak ditemukan saran kata terdekat di KBBI.</p>
-          <p style="font-size:0.8rem;margin-top:4px;">Coba ketik kata dasar dari kata tersebut.</p>
+          <p>Tidak ditemukan saran kata terdekat di KBBI. meow~</p>
+          <p style="font-size:0.8rem;margin-top:4px;">Coba ketik kata dasar dari kata tersebut ya, biar kucingmu ikut bantu.</p>
         </div>
       `;
     }
 
     // Toggle states classes
-    this._bottomSheetOverlay.classList.add('active');
-    this._bottomSheet.classList.add('active');
+    this._bottomSheetOverlay.classList.add("active");
+    this._bottomSheet.classList.add("active");
   }
 
   hideBottomSheet() {
     if (!this._bottomSheet) return;
-    this._bottomSheetOverlay.classList.remove('active');
-    this._bottomSheet.classList.remove('active');
+    this._bottomSheetOverlay.classList.remove("active");
+    this._bottomSheet.classList.remove("active");
   }
 
   /* --- Settings Sidebar handlers --- */
 
   showSettings() {
     if (!this._settingsPanel) return;
-    this._settingsOverlay.classList.add('active');
-    this._settingsPanel.classList.add('active');
+    this._settingsOverlay.classList.add("active");
+    this._settingsPanel.classList.add("active");
   }
 
   hideSettings() {
     if (!this._settingsPanel) return;
-    this._settingsOverlay.classList.remove('active');
-    this._settingsPanel.classList.remove('active');
+    this._settingsOverlay.classList.remove("active");
+    this._settingsPanel.classList.remove("active");
   }
 
   /* --- Active View Switching (Tab routing) --- */
@@ -195,18 +195,18 @@ export class UI {
    */
   switchTab(viewId) {
     // 1. Deactivate all navigation tab buttons
-    document.querySelectorAll('.tab-item').forEach(btn => {
-      btn.classList.remove('active');
+    document.querySelectorAll(".tab-item").forEach((btn) => {
+      btn.classList.remove("active");
       if (btn.dataset.tab === viewId) {
-        btn.classList.add('active');
+        btn.classList.add("active");
       }
     });
 
     // 2. Hide all view panels and show the selected one with animation
-    document.querySelectorAll('.view-panel').forEach(panel => {
-      panel.classList.remove('active');
+    document.querySelectorAll(".view-panel").forEach((panel) => {
+      panel.classList.remove("active");
       if (panel.id === `view-${viewId}`) {
-        panel.classList.add('active');
+        panel.classList.add("active");
       }
     });
   }

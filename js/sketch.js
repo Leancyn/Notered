@@ -74,7 +74,7 @@ export class SketchSearch {
       return results;
     } catch (err) {
       console.error("Sketch search error:", err);
-      this.onError("Gagal mencari gambar. Periksa koneksi internet.");
+      this.onError("Miau! Gagal mencari gambar. Periksa koneksi internet ya.");
       return [];
     } finally {
       this.onLoading(false);
