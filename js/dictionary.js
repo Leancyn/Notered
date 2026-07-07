@@ -49,6 +49,7 @@ export class Dictionary {
     this._words = new Set();
     this._wordsArray = []; // Sorted array for binary searches & autocomplete
     this._isLoaded = false;
+    this._definitions = new Map(); // word -> { arti, type }
 
     // Optional: GitHub-backed KBBI wordlist for better suggestion accuracy
     this._kbbiWordSources = [
@@ -66,43 +67,53 @@ export class Dictionary {
       const cached = await this._getFromCache();
       if (cached && cached.length > 0) {
         this._populate(cached);
+        // Note: Cache only stores word list, not definitions
+        // Definitions will be loaded from local file if needed
         this._isLoaded = true;
-        return;
       }
 
       // 2. Fetch from GitHub dataset
-      const githubWords = await this._fetchKbbiWordsFromGitHub();
-      if (githubWords && githubWords.length) {
+      const githubData = await this._fetchKbbiWordsFromGitHub();
+      if (githubData && githubData.length) {
+        // GitHub data might be array of objects or array of strings
+        // Extract word strings if it's an array of objects
+        let githubWords;
+        if (typeof githubData[0] === 'object') {
+          // Array of objects: extract word field
+          githubWords = githubData.map(e => e?.word || "").filter(Boolean);
+        } else {
+          // Array of strings
+          githubWords = githubData;
+        }
         this._populate(githubWords);
         this._isLoaded = true;
         this._saveToCache(githubWords).catch((err) => {
           console.warn("IndexedDB write warning:", err);
         });
-        return;
       }
 
-      // Fallback: local dictionary__JSON.json (safety net)
-      const res = await fetch("./data/dictionary__JSON.json");
-      if (!res.ok) {
-        throw new Error("Gagal mengambil database KBBI");
+      // 3. Always load definitions from local dictionary__JSON.json
+      // This ensures definitions are available even when loaded from cache
+      try {
+        const res = await fetch("./data/dictionary__JSON.json");
+        if (res.ok) {
+          const payload = await res.json();
+          const dict = Array.isArray(payload?.dictionary) ? payload.dictionary : Array.isArray(payload) ? payload : [];
+          
+          // Only populate definitions if not already loaded
+          if (this._definitions.size === 0) {
+            this._populateDefinitions(dict);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load definitions:", e);
       }
-      const payload = await res.json();
 
-      // dictionary__JSON.json format:
-      // { dictionary: [ { _id, word, arti, type }, ... ] }
-      // Convert to base word list for inclusion checks/autocomplete.
-      const dict = Array.isArray(payload?.dictionary) ? payload.dictionary : Array.isArray(payload) ? payload : [];
-      const words = dict.map((e) => e?.word ?? "").filter(Boolean);
-
-      // 3. Populate internal structures
-      this._populate(words);
-
-      this._isLoaded = true;
-
-      // 4. Save to cache asynchronously
-      this._saveToCache(words).catch((err) => {
-        console.warn("IndexedDB write warning:", err);
-      });
+      // 4. If still not loaded, use fail-safe
+      if (!this._isLoaded) {
+        this._populate(["ada", "baca", "tulis", "kerja", "kucing", "tidak", "sudah", "bisa", "saya", "kamu"]);
+        this._isLoaded = true;
+      }
     } catch (err) {
       console.error("Dictionary load failure:", err);
       // Fail-safe: try to load an emergency basic set in case everything failed
@@ -123,6 +134,24 @@ export class Dictionary {
    */
   has(word) {
     return this._words.has(word.toLowerCase());
+  }
+
+  /**
+   * Get definition for a word
+   * @param {string} word - The word to look up
+   * @returns {object|null} Definition object with arti and type
+   */
+  getDefinition(word) {
+    const normalized = word.toLowerCase().trim();
+    return this._definitions.get(normalized) || null;
+  }
+
+  /**
+   * Get all definitions (for API/external access)
+   * @returns {Map} Map of word -> definition
+   */
+  getAllDefinitions() {
+    return this._definitions;
   }
 
   /** Get number of words loaded */
@@ -187,6 +216,33 @@ export class Dictionary {
     this._words = new Set(wordList);
     // Sort array just in case the JSON source wasn't perfectly sorted
     this._wordsArray = Array.from(this._words).sort();
+  }
+
+  /** Populate definitions from dictionary entries */
+  _populateDefinitions(dictArray) {
+    for (const entry of dictArray) {
+      const word = (entry.word || "").toLowerCase().trim();
+      if (!word) continue;
+
+      const existing = this._definitions.get(word);
+      const newDef = {
+        arti: entry.arti || null,
+        type: entry.type || null,
+      };
+
+      if (!existing) {
+        this._definitions.set(word, newDef);
+      } else {
+        // Merge multiple definitions for the same word
+        const combinedArti = existing.arti 
+          ? `${existing.arti}\n\n${newDef.arti}` 
+          : newDef.arti;
+        this._definitions.set(word, {
+          arti: combinedArti,
+          type: existing.type || newDef.type,
+        });
+      }
+    }
   }
 
   /* --- IndexedDB Helpers (Shared Connection) --- */

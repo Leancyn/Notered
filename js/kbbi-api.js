@@ -1,16 +1,11 @@
 /**
- * kbbi-api.js - GitHub-backed KBBI dictionary definition lookup
+ * kbbi-api.js - KBBI Dictionary Definition Lookup
  *
- * This module fetches definitions from a GitHub-hosted dataset.
- * Because GitHub does not provide an official public "KBBI API",
- * the best "API" that works in a static frontend is exposing a JSON
- * dataset in a GitHub repository and fetching it via raw URLs.
+ * Fetches definitions from the local dictionary__JSON.json dataset.
+ * The dataset format is: { "dictionary": [ { word, arti, type }, ... ] }
  *
- * IMPORTANT:
- * - Configure REPO_RAW_URLS to match the repository you want to use.
- * - Format expected:
- *   - word -> { def: string | string[], pos?: string, examples?: string[] }
- *   - or word -> string
+ * This module builds an index on first load and caches it in IndexedDB
+ * for subsequent lookups.
  */
 
 const DEFAULT_DEFINITION_FALLBACK = {
@@ -40,7 +35,7 @@ function _openDB() {
       }
     };
     request.onsuccess = (e) => resolve(e.target.result);
-    request.onerror = (e) => reject(request.error);
+    request.onerror = (e) => reject(e.target.error);
   });
 }
 
@@ -76,6 +71,41 @@ async function _setCached(word, payload) {
   }
 }
 
+/**
+ * Build a word -> definition index from dictionary__JSON.json format
+ * Format: { "dictionary": [ { word, arti, type }, ... ] }
+ * Returns: Map<word, { def, pos, type }>
+ */
+function _buildDefinitionIndex(dictArray) {
+  const index = new Map();
+  
+  for (const entry of dictArray) {
+    const word = _normalizeWord(entry.word);
+    if (!word) continue;
+
+    const existing = index.get(word);
+    const newEntry = {
+      def: entry.arti || null,
+      pos: entry.type ? `Tipe ${entry.type}` : null,
+      type: entry.type,
+    };
+
+    if (!existing) {
+      index.set(word, newEntry);
+    } else {
+      // Merge: concatenate definitions for words with multiple entries
+      const combinedDef = existing.def 
+        ? `${existing.def}\n\n${newEntry.def}` 
+        : newEntry.def;
+      index.set(word, {
+        ...existing,
+        def: combinedDef,
+      });
+    }
+  }
+
+  return index;
+}
 
 async function _fetchAllDefinitionsOnce() {
   // Local-only source (as requested)
@@ -84,10 +114,14 @@ async function _fetchAllDefinitionsOnce() {
     throw new Error(`Failed to load KBBI definitions from local: ${LOCAL_DICT_URL} (HTTP ${res.status})`);
   }
   const data = await res.json();
-  if (!data || typeof data !== "object") {
-    throw new Error("KBBI local definitions payload is not an object");
+  
+  // Handle dictionary__JSON.json format: { "dictionary": [ ... ] }
+  const dictArray = Array.isArray(data?.dictionary) ? data.dictionary : [];
+  if (!dictArray.length) {
+    throw new Error("KBBI local definitions payload is empty or invalid");
   }
-  return data;
+
+  return _buildDefinitionIndex(dictArray);
 }
 
 let _definitionsIndexPromise = null;
@@ -112,11 +146,9 @@ export class KbbiApi {
     if (cached) return cached;
 
     // Load (or fetch) the whole index once.
-    // This is acceptable for small datasets; if the dataset is huge,
-    // switch to a per-word endpoint.
     const index = await _getDefinitionsIndex();
 
-    const entry = index[w];
+    const entry = index.get(w);
     if (!entry) {
       const empty = { ...DEFAULT_DEFINITION_FALLBACK };
       empty.def = null;
@@ -124,21 +156,11 @@ export class KbbiApi {
       return empty;
     }
 
-    let payload;
-    if (typeof entry === "string") {
-      payload = { ...DEFAULT_DEFINITION_FALLBACK, def: entry };
-    } else {
-      // Normalize different possible shapes
-      const def = entry.def ?? entry.definition ?? entry.arti ?? entry.meaning ?? null;
-      const pos = entry.pos ?? entry.partOfSpeech ?? null;
-      const examples = entry.examples ?? entry.contoh ?? [];
-
-      payload = {
-        def: Array.isArray(def) ? def.join("; ") : def,
-        pos,
-        examples: Array.isArray(examples) ? examples : [],
-      };
-    }
+    const payload = {
+      def: entry.def,
+      pos: entry.pos,
+      examples: [],
+    };
 
     await _setCached(w, payload);
     return payload;

@@ -137,13 +137,13 @@ export class SpellChecker {
     }
 
     // 5. Check direct dictionary inclusion
-    if (this.dictionary.has(cleanWord)) {
+    if (this.dictionary && this.dictionary.has(cleanWord)) {
       return { valid: true, type: "correct", suggestions: [], bakuForm: null };
     }
 
     // 6. Stem the word and check dictionary inclusion
     const baseWord = stem(cleanWord);
-    if (this.dictionary.has(baseWord)) {
+    if (this.dictionary && this.dictionary.has(baseWord)) {
       return { valid: true, type: "correct", suggestions: [], bakuForm: null };
     }
 

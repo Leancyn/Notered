@@ -15,6 +15,7 @@ import { Storage } from "./storage.js";
 import { Export } from "./export.js";
 import { KbbiApi } from "./kbbi-api.js";
 import { MoodTracker } from "./mood-tracker.js";
+import { kbbiParser } from "./kbbi-parser.js";
 
 class App {
   constructor() {
@@ -460,6 +461,7 @@ class App {
   async _handleWordClick(data) {
     const subtitle = data.type === "tidak_baku" ? `Kata tidak baku. Sebaiknya gunakan: "${data.bakuForm}"` : "Kata tidak ditemukan di KBBI.";
 
+    // Show bottom sheet immediately with suggestions
     this.ui.showBottomSheet({
       title: data.word,
       subtitle: subtitle,
@@ -468,55 +470,72 @@ class App {
       onReplaceAll: (newWord) => data.replaceAll(data.word, newWord),
     });
 
+    // Add definition block with loading state immediately to prevent flicker
+    const contentEl = document.querySelector(".bottom-sheet-content");
+    if (!contentEl) return;
+
+    const defBlock = document.createElement("div");
+    defBlock.id = "kbbi-definition-block";
+    defBlock.style.marginTop = "14px";
+    defBlock.style.padding = "12px 12px";
+    defBlock.style.borderRadius = "12px";
+    defBlock.style.background = "rgba(255,255,255,0.04)";
+    defBlock.style.border = "1px solid rgba(255,255,255,0.12)";
+    defBlock.innerHTML = `
+      <div style="font-weight:800;color:var(--text-primary);margin-bottom:6px;">Definisi KBBI</div>
+      <div style="color:var(--text-secondary);font-size:0.9rem;line-height:1.5;">
+        <em style="color:var(--text-secondary);">Memuat definisi...</em>
+      </div>
+    `;
+    contentEl.appendChild(defBlock);
+
+    // Now fetch definition asynchronously
     try {
-      const kbbi = await KbbiApi.lookup(data.word);
+      // Use dictionary's built-in definition lookup (from dictionary__JSON.json)
+      // Try multiple case variations to ensure we find the word
+      const wordLower = data.word.toLowerCase();
+      let definition = this.dictionary.getDefinition(wordLower);
+      
+      // If not found, try original case
+      if (!definition) {
+        definition = this.dictionary.getDefinition(data.word);
+      }
+      
+      // If still not found, try capitalized
+      if (!definition && data.word.length > 0) {
+        const capitalized = data.word.charAt(0).toUpperCase() + data.word.slice(1).toLowerCase();
+        definition = this.dictionary.getDefinition(capitalized);
+      }
 
-      const contentEl = document.querySelector(".bottom-sheet-content");
-      if (!contentEl) return;
+      const defText = definition && definition.arti ? definition.arti : null;
+      const posText = definition && definition.type ? definition.type : null;
 
-      const defBlock = document.createElement("div");
-      defBlock.style.marginTop = "14px";
-      defBlock.style.padding = "12px 12px";
-      defBlock.style.borderRadius = "12px";
-      defBlock.style.background = "rgba(255,255,255,0.04)";
-      defBlock.style.border = "1px solid rgba(255,255,255,0.12)";
+      // Format definition using KBBI parser
+      let formattedDef = "";
+      if (defText) {
+        // Use the KBBI parser to format the definition
+        const parsed = kbbiParser.parse(defText);
+        if (parsed) {
+          formattedDef = kbbiParser.format(parsed);
+        } else {
+          // Fallback to simple text if parsing fails
+          formattedDef = this._escapeHtml(defText);
+        }
+      }
 
-      const defText = kbbi && kbbi.def ? kbbi.def : null;
-      const posText = kbbi && kbbi.pos ? kbbi.pos : null;
-      const examples = kbbi && kbbi.examples ? kbbi.examples : [];
-
+      // Update the definition block with actual content
+      defBlock.innerHTML = `
+        <div style="font-weight:800;color:var(--text-primary);margin-bottom:6px;">Definisi KBBI</div>
+        <div style="color:var(--text-secondary);font-size:0.9rem;line-height:1.5;max-height:240px;overflow-y:auto;padding-right:4px;white-space:pre-wrap;">${formattedDef ? this._escapeHtml(formattedDef) : `<em style="color:var(--text-secondary);">Definisi tidak tersedia.</em>`}</div>
+      `;
+    } catch (e) {
+      console.warn("KBBI lookup failed:", e);
       defBlock.innerHTML = `
         <div style="font-weight:800;color:var(--text-primary);margin-bottom:6px;">Definisi KBBI</div>
         <div style="color:var(--text-secondary);font-size:0.9rem;line-height:1.5;">
-          ${posText ? `<div style="margin-bottom:6px;"><strong style="color:var(--text-primary);">Kata kelas:</strong> ${this._escapeHtml(posText)}</div>` : ``}
-          ${defText ? this._escapeHtml(defText) : `<em style="color:var(--text-secondary);">Definisi tidak tersedia.</em>`}
+          <em style="color:var(--text-secondary);">Gagal memuat definisi KBBI.</em>
         </div>
-        ${
-          examples && examples.length
-            ? `
-          <div style="margin-top:10px;color:var(--text-secondary);font-size:0.85rem;">
-            <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px;">Contoh</div>
-            ${examples
-              .slice(0, 3)
-              .map((ex) => `<div>• ${this._escapeHtml(ex)}</div>`)
-              .join("")}
-          </div>
-        `
-            : ``
-        }
       `;
-
-      contentEl.appendChild(defBlock);
-    } catch (e) {
-      console.warn("KBbi lookup failed:", e);
-      const contentEl = document.querySelector(".bottom-sheet-content");
-      if (!contentEl) return;
-      const errBlock = document.createElement("div");
-      errBlock.style.marginTop = "14px";
-      errBlock.style.color = "var(--text-secondary)";
-      errBlock.style.fontSize = "0.85rem";
-      errBlock.textContent = "Gagal memuat definisi KBBI (GitHub).";
-      contentEl.appendChild(errBlock);
     }
   }
 
@@ -968,6 +987,40 @@ class App {
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  /** Decode HTML entities (e.g. < > & numeric entities) */
+  _decodeHtmlEntities(str) {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = str;
+    return textarea.value;
+  }
+
+  /** Basic HTML sanitizer: allow safe tags only */
+  _sanitizeHtml(html) {
+    const allowed = new Set(["b", "i", "br", "sup", "sub", "strong", "em"]);
+    const tokens = html.split(/(<\/?[a-z][a-z0-9]*\b[^>]*>)/i);
+    return tokens
+      .map((token) => {
+        if (!token.startsWith("<")) return this._escapeHtml(token);
+        const closeMatch = token.match(/^<\/([a-z]+)>$/i);
+        const openMatch = token.match(/^<([a-z]+)([^>]*)>$/i);
+        if (closeMatch) {
+          const tag = closeMatch[1].toLowerCase();
+          return allowed.has(tag) ? token : "";
+        }
+        if (openMatch) {
+          const tag = openMatch[1].toLowerCase();
+          if (!allowed.has(tag)) return "";
+          const attrs = openMatch[2]
+            .split(/\s+/)
+            .filter((attr) => /^(href|src|style|class|id)=/i.test(attr))
+            .join(" ");
+          return attrs ? `<${tag} ${attrs}>` : `<${tag}>`;
+        }
+        return "";
+      })
+      .join("");
   }
 }
 

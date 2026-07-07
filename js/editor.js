@@ -29,6 +29,7 @@ export class Editor {
     this._debounceTimer = null;
     this._rebuildTimer = null;
     this._autoSaveTimer = null;
+    this._autoCorrectTimer = null;
     this._isProcessing = false;
     this._lastText = "";
     this._needsRebuild = false;
@@ -74,7 +75,7 @@ export class Editor {
     this.el.addEventListener("focus", () => {
       this.el.classList.add("editor-focused");
     });
-    
+
     // Rebuild spell check when user leaves the editor
     this.el.addEventListener("blur", () => {
       this.el.classList.remove("editor-focused");
@@ -91,9 +92,18 @@ export class Editor {
     // Don't rebuild HTML during typing - this prevents cursor jumping
     // Just update stats immediately
     this._updateStatsQuick();
-    
+
     // Mark that content has changed and needs rebuild later
     this._needsRebuild = true;
+
+    // Auto-correct: trigger rebuild after a short delay to avoid interrupting typing
+    if (this.autoCorrect) {
+      clearTimeout(this._autoCorrectTimer);
+      this._autoCorrectTimer = setTimeout(() => {
+        this._processText();
+        this._needsRebuild = false;
+      }, 300); // Wait 300ms after user stops typing
+    }
   }
 
   /** Quick stats update without full spell check */
@@ -131,10 +141,6 @@ export class Editor {
         return;
       }
       this._lastText = normalizedText;
-
-      // Save cursor position BEFORE we mutate innerHTML.
-      // Also disable selection saving for very short texts to avoid DOM reflow glitches.
-      const savedSelection = this.getPlainText().length > 0 ? this._saveSelection() : null;
 
       // Use normalized text for tokenization/highlights, but keep selection restoration stable.
       const text = normalizedText;
@@ -196,23 +202,33 @@ export class Editor {
 
           html += this._escapeHtml(before);
 
+          // Auto-correct: if enabled and word has a single high-confidence suggestion, use it
+          let displayWord = word;
+          if (this.autoCorrect && result.type === "error" && result.suggestions.length === 1) {
+            // Auto-correct with single suggestion - actually change the word
+            displayWord = result.suggestions[0];
+          }
+
           if (result.type === "error") {
-            html += `<span class="word-error" data-word="${this._escapeAttr(word)}" data-suggestions='${JSON.stringify(result.suggestions)}' title="Kata tidak ditemukan">${this._escapeHtml(word)}</span>`;
+            html += `<span class="word-error" data-word="${this._escapeAttr(word)}" data-suggestions='${JSON.stringify(result.suggestions)}' title="Kata tidak ditemukan">${this._escapeHtml(displayWord)}</span>`;
           } else if (result.type === "tidak_baku") {
-            html += `<span class="word-warning" data-word="${this._escapeAttr(word)}" data-baku="${this._escapeAttr(result.bakuForm)}" data-suggestions='${JSON.stringify(result.suggestions)}' title="Kata tidak baku, gunakan: ${result.bakuForm}">${this._escapeHtml(word)}</span>`;
+            html += `<span class="word-warning" data-word="${this._escapeAttr(word)}" data-baku="${this._escapeAttr(result.bakuForm)}" data-suggestions='${JSON.stringify(result.suggestions)}' title="Kata tidak baku, gunakan: ${result.bakuForm}">${this._escapeHtml(displayWord)}</span>`;
           } else {
-            html += this._escapeHtml(word);
+            html += this._escapeHtml(displayWord);
           }
 
           html += this._escapeHtml(after);
         }
       }
 
-      // Update editor HTML
-      this.el.innerHTML = html;
-
-      // Restore cursor position
-      this._restoreSelection(savedSelection);
+      // Only update DOM and restore cursor if HTML actually changed
+      if (html !== this.el.innerHTML) {
+        // Save cursor position BEFORE we mutate innerHTML
+        const savedSelection = this.getPlainText().length > 0 ? this._saveSelection() : null;
+        this.el.innerHTML = html;
+        // Restore cursor position only when DOM was actually modified
+        this._restoreSelection(savedSelection);
+      }
 
       // Update stats (use normalized text for PUEBI-consistent counts)
       const accuracy = totalChecked > 0 ? Math.round((correctCount / totalChecked) * 100) : 100;
@@ -284,8 +300,7 @@ export class Editor {
     if (sel && sel.rangeCount > 0) {
       const range = sel.getRangeAt(0);
       // Check if cursor is right after the word being replaced
-      cursorAfterWord = range.startContainer === wordSpan || 
-                        (range.startContainer.parentNode === wordSpan);
+      cursorAfterWord = range.startContainer === wordSpan || range.startContainer.parentNode === wordSpan;
     }
 
     const textNode = document.createTextNode(newWord);
@@ -313,7 +328,7 @@ export class Editor {
   /** Replace all instances of a word */
   _replaceAllWords(oldWord, newWord) {
     const spans = this.el.querySelectorAll(`[data-word="${oldWord}"]`);
-    
+
     // Save cursor position before replacement
     const sel = window.getSelection();
     let cursorAfterWord = false;
@@ -321,8 +336,7 @@ export class Editor {
       const range = sel.getRangeAt(0);
       const clickedSpan = this._lastClickedSpan;
       // Check if cursor is near the clicked word
-      if (clickedSpan && range.startContainer === clickedSpan || 
-          (range.startContainer.parentNode === clickedSpan)) {
+      if ((clickedSpan && range.startContainer === clickedSpan) || range.startContainer.parentNode === clickedSpan) {
         cursorAfterWord = true;
       }
     }
@@ -338,42 +352,69 @@ export class Editor {
     this._updateStatsQuick();
   }
 
-  /** Save cursor position relative to text content */
+  /** Save cursor position using absolute character offset */
   _saveSelection() {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return null;
 
     const range = sel.getRangeAt(0);
+    const textNode = range.startContainer;
     
-    // Simple approach: save the exact node and offset
-    // This is more reliable than character counting
+    // Calculate absolute character offset from start of editor
+    const preRange = document.createRange();
+    preRange.selectNodeContents(this.el);
+    preRange.setEnd(textNode, range.startOffset);
+    const absoluteOffset = preRange.toString().length;
+    
     return {
-      node: range.startContainer,
-      offset: range.startOffset
+      absoluteOffset: absoluteOffset
     };
   }
 
-  /** Restore cursor position from saved offset */
+  /** Restore cursor position using absolute character offset */
   _restoreSelection(saved) {
-    if (!saved) return;
+    if (!saved || saved.absoluteOffset === undefined) return;
 
     const sel = window.getSelection();
     if (!sel) return;
 
-    // Try to restore to the exact node and offset
-    if (saved.node && saved.node.parentNode) {
-      try {
+    try {
+      const targetOffset = saved.absoluteOffset;
+      let currentOffset = 0;
+      
+      // Walk through all text nodes to find the correct position
+      const walker = document.createTreeWalker(this.el, NodeFilter.SHOW_TEXT, null, false);
+      let node = walker.nextNode();
+      
+      while (node) {
+        const nodeLength = node.textContent.length;
+        
+        if (currentOffset + nodeLength >= targetOffset) {
+          // Found the text node containing the cursor
+          const range = document.createRange();
+          const cursorPos = targetOffset - currentOffset;
+          
+          range.setStart(node, Math.min(cursorPos, nodeLength));
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          return;
+        }
+        
+        currentOffset += nodeLength;
+        node = walker.nextNode();
+      }
+      
+      // Fallback: place cursor at end
+      if (this.el.lastChild) {
         const range = document.createRange();
-        const node = saved.node;
-        const offset = Math.min(saved.offset, node.textContent.length || node.childNodes.length);
-        range.setStart(node, offset);
-        range.collapse(true);
+        range.selectNodeContents(this.el);
+        range.collapse(false);
         sel.removeAllRanges();
         sel.addRange(range);
-        return;
-      } catch (e) {
-        // Node reference failed, fall through
       }
+    } catch (e) {
+      // Silently fail
     }
   }
 
@@ -504,6 +545,7 @@ export class Editor {
   destroy() {
     clearTimeout(this._debounceTimer);
     clearTimeout(this._rebuildTimer);
+    clearTimeout(this._autoCorrectTimer);
     clearInterval(this._autoSaveTimer);
   }
 
@@ -516,7 +558,66 @@ export class Editor {
 
   /** Escape attribute value */
   _escapeAttr(str) {
-    return str.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    return str.replace(/"/g, '"').replace(/'/g, "&#39;");
+  }
+
+  /** Try to auto-correct the word at the current cursor position */
+  _tryAutoCorrectAtCursor() {
+    if (!this.spellChecker) return;
+
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    const range = sel.getRangeAt(0);
+    const textNode = range.startContainer;
+
+    // Only process text nodes
+    if (textNode.nodeType !== Node.TEXT_NODE) return;
+
+    const text = textNode.textContent;
+    const cursorPos = range.startOffset;
+
+    // Find the word at cursor (look backwards and forwards)
+    let wordStart = cursorPos;
+    while (wordStart > 0 && /[\p{L}\p{N}]/u.test(text[wordStart - 1])) {
+      wordStart--;
+    }
+
+    let wordEnd = cursorPos;
+    while (wordEnd < text.length && /[\p{L}\p{N}]/u.test(text[wordEnd])) {
+      wordEnd++;
+    }
+
+    const word = text.substring(wordStart, wordEnd);
+    if (!word || word.length < 2) return;
+
+    // Check if word is misspelled
+    const result = this.spellChecker.check(word);
+
+    // Auto-correct if there's exactly one high-confidence suggestion
+    if (result.type === "error" && result.suggestions.length === 1) {
+      const corrected = result.suggestions[0];
+
+      // Replace the word in the text node
+      const before = text.substring(0, wordStart);
+      const after = text.substring(wordEnd);
+      textNode.textContent = before + corrected + after;
+
+      // Move cursor to end of corrected word
+      const newCursorPos = wordStart + corrected.length;
+      const newRange = document.createRange();
+      newRange.setStart(textNode, newCursorPos);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+
+      // Force rebuild to update highlighting
+      this._lastText = "";
+      this._needsRebuild = true;
+
+      // Update stats
+      this._updateStatsQuick();
+    }
   }
 
   /** Enable/disable autocorrect option */
