@@ -1,336 +1,405 @@
 /**
- * dictionary.js - Notered Dictionary Loader and Cacher
+ * dictionary.js — High-Performance KBBI Dictionary Engine
  *
- * Fetches and parses the kbbi-words database. Implements
- * IndexedDB storage to speed up consecutive app loads.
+ * Data Structures Used:
+ * ─────────────────────
+ * 1. Set<string>           — O(1) exact word lookup
+ * 2. Trie (compressed)     — O(prefix) autocomplete traversal
+ * 3. SymSpell delete index — O(maxDist·prefixLen) fuzzy candidate retrieval
+ *
+ * Design goals:
+ * - lookup:     O(1) via Set
+ * - autocomplete: O(k·prefix) via Trie DFS
+ * - fuzzy search: O(k) candidate retrieval + O(k·n·m) scoring (small k)
+ * - NO full-dictionary linear scans during spell check
+ *
+ * Loading strategy:
+ * 1. IndexedDB cache → fast startup path (skips JSON parse + index build)
+ * 2. Fresh fetch from ./data/dictionary__JSON.json → authoritative
+ * 3. Emergency fallback set if everything fails
+ *
+ * SymSpell parameters:
+ * - maxDistance = 2  (catches most typos: 1-2 edit operations)
+ * - prefixLen   = 7  (longer prefix = smaller index, comparable accuracy)
  */
 
-// Shared IndexedDB connection pool
-let _sharedDB = null;
+import { kbbiValidator } from './kbbi-validator.js';
+
+// ── IndexedDB connection pool ───────────────────────────────────────────────
 let _dbPromise = null;
 
 function _getDB() {
-  if (!_dbPromise) {
-    _dbPromise = new Promise((resolve, reject) => {
-      try {
-        const request = indexedDB.open("NoteredDB", 3);
-        request.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains("dictionary")) {
-            db.createObjectStore("dictionary");
+  if (_dbPromise) return _dbPromise;
+
+  _dbPromise = new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open('NoteredDB', 4);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        ['dictionary', 'kbbi_defs', 'typo'].forEach(store => {
+          if (!db.objectStoreNames.contains(store)) {
+            db.createObjectStore(store);
           }
-          if (!db.objectStoreNames.contains("kbbi_defs")) {
-            db.createObjectStore("kbbi_defs");
-          }
-          if (!db.objectStoreNames.contains("typo")) {
-            db.createObjectStore("typo");
-          }
-        };
-        request.onsuccess = (e) => {
-          _sharedDB = e.target.result;
-          resolve(_sharedDB);
-        };
-        request.onerror = (e) => reject(e.target.error);
-      } catch (e) {
-        reject(e);
-      }
-    });
-  }
+        });
+      };
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror   = (e) => reject(e.target.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+
   return _dbPromise;
 }
 
-const DB_NAME = "NoteredDB";
-const DB_VERSION = 3;
-const STORE_NAME = "dictionary";
-const KEY_NAME = "kbbi_words";
+// ── Constants ───────────────────────────────────────────────────────────────
+const STORE_NAME             = 'dictionary';
+const KEY_WORDS              = 'kbbi_words_v4';
+const KEY_DEFS               = 'kbbi_defs_v4';
+const SYMSPELL_MAX_DISTANCE  = 2;
+const SYMSPELL_PREFIX_LEN    = 7;  // characters to use for delete key generation
+const AUTOCOMPLETE_SCAN_LIMIT = 60; // max nodes to DFS before sorting
 
-export class Dictionary {
-  constructor() {
-    this._words = new Set();
-    this._wordsArray = []; // Sorted array for binary searches & autocomplete
-    this._isLoaded = false;
-    this._definitions = new Map(); // word -> { arti, type }
+// ── Trie helpers ─────────────────────────────────────────────────────────────
 
-    // Optional: GitHub-backed KBBI wordlist for better suggestion accuracy
-    this._kbbiWordSources = [
-      "https://raw.githubusercontent.com/dyazincahya/KBBI-SQL-database/main/dictionary__JSON.json",
-    ];
+function _trieNode() {
+  return { c: Object.create(null), w: null };
+  //            ^children map       ^terminal word
+}
+
+// ── SymSpell delete generation ────────────────────────────────────────────────
+
+/**
+ * Generate all unique "delete" variants of `word` up to `maxDist` operations.
+ * Operates only on the first `prefixLen` characters for smaller index size.
+ * @param {string} word
+ * @param {number} maxDist
+ * @param {number} prefixLen
+ * @returns {Set<string>}
+ */
+function _generateDeletes(word, maxDist = SYMSPELL_MAX_DISTANCE, prefixLen = SYMSPELL_PREFIX_LEN) {
+  const source   = word.slice(0, prefixLen);
+  const deletes  = new Set();
+  let frontier   = new Set([source]);
+
+  for (let d = 0; d < maxDist; d++) {
+    const next = new Set();
+    for (const token of frontier) {
+      if (token.length <= 1) continue;
+      for (let i = 0; i < token.length; i++) {
+        const del = token.slice(0, i) + token.slice(i + 1);
+        if (!deletes.has(del)) {
+          deletes.add(del);
+          next.add(del);
+        }
+      }
+    }
+    frontier = next;
   }
 
-  /**
-   * Initialize and load dictionary from cache or server
-   * @returns {Promise<void>}
-   */
+  return deletes;
+}
+
+// ── Common word autocomplete priority ────────────────────────────────────────
+const AUTOCOMPLETE_PRIORITY = Object.freeze(Object.assign(Object.create(null), {
+  apa: 100, apabila: 95, api: 90, aplikasi: 85, apel: 80,
+  ada: 70,  adalah:  68, akan: 66, atau: 64, agar: 62,
+  aku: 60,  anda:    58, anak: 56, antara: 54, atas: 52,
+  bisa: 50, bukan: 48, bagi: 46, baik: 44, baru: 42, benar: 40,
+  cara: 38, cepat: 36, cukup: 34,
+  dan: 100, dapat: 95, dalam: 90, dari: 88, dia: 85,
+  hal: 50, hari: 48, harus: 46, hendak: 44,
+  ini: 90, itu: 88, ingin: 80,
+  juga: 75, jalan: 70, jadi: 68,
+  kamu: 60, kata: 58, karena: 56, ke: 100, kerja: 50,
+  lain: 45, lagi: 43, lebih: 42,
+  masih: 40, maka: 38, mau: 36, mereka: 34,
+  namun: 32, tidak: 100,
+  oleh: 30, atau: 100, pada: 88,
+  saya: 70, sudah: 65, semua: 60, sangat: 55, saat: 50,
+  tapi: 45, tetapi: 43, untuk: 100, yang: 100,
+}));
+
+// ── Dictionary Class ──────────────────────────────────────────────────────────
+export class Dictionary {
+  constructor() {
+    this._words       = new Set();       // O(1) exact lookup
+    this._wordsArray  = [];              // sorted, for binary search
+    this._trie        = _trieNode();     // prefix autocomplete
+    this._deleteIdx   = new Map();       // SymSpell delete index
+    this._definitions = new Map();       // word → { arti, type, isIncomplete }
+    this._isLoaded    = false;
+  }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
   async load() {
     try {
-      // 1. Try loading from IndexedDB cache
-      const cached = await this._getFromCache();
-      if (cached && cached.length > 0) {
-        this._populate(cached);
-        // Note: Cache only stores word list, not definitions
-        // Definitions will be loaded from local file if needed
+      // 1. Warm-start from IndexedDB cache
+      const [cachedWords, cachedDefs] = await Promise.all([
+        this._idbGet(STORE_NAME, KEY_WORDS),
+        this._idbGet(STORE_NAME, KEY_DEFS),
+      ]);
+
+      if (cachedWords && Array.isArray(cachedWords) && cachedWords.length > 0) {
+        this._populate(cachedWords);
+        if (cachedDefs) this._loadCachedDefs(cachedDefs);
         this._isLoaded = true;
       }
 
-      // 2. Fetch from GitHub dataset
-      const githubData = await this._fetchKbbiWordsFromGitHub();
-      if (githubData && githubData.length) {
-        // GitHub data might be array of objects or array of strings
-        // Extract word strings if it's an array of objects
-        let githubWords;
-        if (typeof githubData[0] === 'object') {
-          // Array of objects: extract word field
-          githubWords = githubData.map(e => e?.word || "").filter(Boolean);
-        } else {
-          // Array of strings
-          githubWords = githubData;
-        }
-        this._populate(githubWords);
-        this._isLoaded = true;
-        this._saveToCache(githubWords).catch((err) => {
-          console.warn("IndexedDB write warning:", err);
-        });
-      }
-
-      // 3. Always load definitions from local dictionary__JSON.json
-      // This ensures definitions are available even when loaded from cache
+      // 2. Always attempt fresh fetch from local JSON
       try {
-        const res = await fetch("./data/dictionary__JSON.json");
+        const res = await fetch('./data/dictionary__JSON.json');
         if (res.ok) {
           const payload = await res.json();
-          const dict = Array.isArray(payload?.dictionary) ? payload.dictionary : Array.isArray(payload) ? payload : [];
-          
-          // Only populate definitions if not already loaded
-          if (this._definitions.size === 0) {
+          const dict    = Array.isArray(payload?.dictionary) ? payload.dictionary
+            : Array.isArray(payload) ? payload : [];
+
+          if (dict.length > 0) {
+            const wordList = dict
+              .map(entry => (entry?.word ?? '').toLowerCase().trim())
+              .filter(Boolean);
+
+            this._populate(wordList);
             this._populateDefinitions(dict);
+            this._isLoaded = true;
+
+            // Persist to IndexedDB asynchronously (non-blocking)
+            this._idbPut(STORE_NAME, KEY_WORDS, wordList).catch(console.warn);
+            this._idbPut(STORE_NAME, KEY_DEFS,  this._serializeDefs()).catch(console.warn);
           }
         }
-      } catch (e) {
-        console.warn("Failed to load definitions:", e);
+      } catch (fetchErr) {
+        console.warn('Dictionary fetch failed — using cache or fallback:', fetchErr);
       }
 
-      // 4. If still not loaded, use fail-safe
-      if (!this._isLoaded) {
-        this._populate(["ada", "baca", "tulis", "kerja", "kucing", "tidak", "sudah", "bisa", "saya", "kamu"]);
+      // 3. Emergency fallback
+      if (!this._isLoaded || this._words.size === 0) {
+        this._populate(['ada', 'baca', 'tulis', 'kerja', 'kucing', 'tidak', 'sudah', 'bisa', 'saya', 'kamu']);
         this._isLoaded = true;
       }
     } catch (err) {
-      console.error("Dictionary load failure:", err);
-      // Fail-safe: try to load an emergency basic set in case everything failed
-      this._populate(["ada", "baca", "tulis", "kerja", "kucing", "tidak", "sudah", "bisa", "saya", "kamu"]);
+      console.error('Dictionary.load() fatal:', err);
+      this._populate(['ada', 'baca', 'tulis', 'kerja', 'tidak', 'sudah', 'bisa', 'saya', 'kamu']);
       this._isLoaded = true;
     }
   }
 
-  /** Check if dictionary load has completed */
-  isLoaded() {
-    return this._isLoaded;
-  }
+  // ── Public API ────────────────────────────────────────────────────────────
 
-  /**
-   * Check if a word exists in the dictionary
-   * @param {string} word - Lowercase word
-   * @returns {boolean}
-   */
+  isLoaded()        { return this._isLoaded; }
+  getSize()         { return this._words.size; }
+  getAllWords()      { return this._words; }
+  getAllDefinitions(){ return this._definitions; }
+
+  /** O(1) exact lookup */
   has(word) {
-    return this._words.has(word.toLowerCase());
+    return this._words.has((word ?? '').toLowerCase().trim());
   }
 
-  /**
-   * Get definition for a word
-   * @param {string} word - The word to look up
-   * @returns {object|null} Definition object with arti and type
-   */
+  /** Get definition object for a word */
   getDefinition(word) {
-    const normalized = word.toLowerCase().trim();
-    return this._definitions.get(normalized) || null;
+    return this._definitions.get((word ?? '').toLowerCase().trim()) || null;
   }
 
   /**
-   * Get all definitions (for API/external access)
-   * @returns {Map} Map of word -> definition
+   * Autocomplete — returns up to `limit` words starting with `prefix`.
+   * Uses Trie DFS for O(prefix + k) traversal.
+   * @param {string} prefix
+   * @param {number} limit
+   * @returns {string[]}
    */
-  getAllDefinitions() {
-    return this._definitions;
-  }
-
-  /** Get number of words loaded */
-  getSize() {
-    return this._words.size;
-  }
-
-  /** Get the raw Set object */
-  getAllWords() {
-    return this._words;
-  }
-
-  /**
-   * Auto-complete suggestions matching a prefix
-   * @param {string} prefix - Starting letters
-   * @param {number} limit - Max suggestions to return
-   * @returns {string[]} Matching words list
-   */
-  suggest(prefix, limit = 5) {
-    prefix = prefix.toLowerCase();
+  suggest(prefix, limit = 8) {
+    prefix = (prefix ?? '').toLowerCase().trim();
     if (!prefix) return [];
 
-    const results = [];
-    // Binary search to find start index of matches
-    let low = 0;
-    let high = this._wordsArray.length - 1;
-    let startIdx = -1;
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const val = this._wordsArray[mid];
-
-      if (val.startsWith(prefix)) {
-        startIdx = mid;
-        // Keep looking left for the earliest match
-        high = mid - 1;
-      } else if (val < prefix) {
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
+    let node = this._trie;
+    for (const ch of prefix) {
+      node = node.c[ch];
+      if (!node) return [];
     }
 
-    if (startIdx !== -1) {
-      // Gather all consecutive words starting with prefix
-      for (let i = startIdx; i < this._wordsArray.length; i++) {
-        const val = this._wordsArray[i];
-        if (val.startsWith(prefix)) {
-          results.push(val);
-          if (results.length >= limit) break;
-        } else {
-          break; // Words no longer start with prefix
+    const results = [];
+    this._dfs(node, results, AUTOCOMPLETE_SCAN_LIMIT);
+
+    return results
+      .sort((a, b) => this._rankAutocomplete(prefix, a, b))
+      .slice(0, limit);
+  }
+
+  /**
+   * SymSpell fuzzy candidates — does NOT scan the full dictionary.
+   * Returns words within `maxDistance` edits via the pre-built delete index.
+   * @param {string} word
+   * @param {number} maxDistance
+   * @param {number} limit
+   * @returns {string[]}
+   */
+  fuzzyCandidates(word, maxDistance = SYMSPELL_MAX_DISTANCE, limit = 100) {
+    const norm = (word ?? '').toLowerCase().trim();
+    if (!norm) return [];
+
+    const candidates = new Set();
+    if (this._words.has(norm)) candidates.add(norm);
+
+    const queryDeletes = _generateDeletes(norm, maxDistance, SYMSPELL_PREFIX_LEN);
+    // Also add the raw prefix itself as a lookup key
+    queryDeletes.add(norm.slice(0, SYMSPELL_PREFIX_LEN));
+
+    for (const key of queryDeletes) {
+      const bucket = this._deleteIdx.get(key);
+      if (!bucket) continue;
+
+      for (const cand of bucket) {
+        // Quick length guard before paying edit-distance cost in caller
+        if (Math.abs(cand.length - norm.length) <= maxDistance + 1) {
+          candidates.add(cand);
+          if (candidates.size >= limit) return Array.from(candidates);
         }
       }
     }
 
-    return results;
+    return Array.from(candidates);
   }
 
-  /** Populates Set and Array from flat list */
+  // ── Internal Builders ─────────────────────────────────────────────────────
+
   _populate(wordList) {
-    this._words = new Set(wordList);
-    // Sort array just in case the JSON source wasn't perfectly sorted
+    const normalized = wordList
+      .map(w => (w ?? '').toLowerCase().trim())
+      .filter(Boolean);
+
+    this._words      = new Set(normalized);
     this._wordsArray = Array.from(this._words).sort();
+
+    this._buildTrie(this._wordsArray);
+    this._buildDeleteIndex(this._wordsArray);
   }
 
-  /** Populate definitions from dictionary entries */
+  _buildTrie(words) {
+    this._trie = _trieNode();
+    for (const word of words) {
+      let node = this._trie;
+      for (const ch of word) {
+        if (!node.c[ch]) node.c[ch] = _trieNode();
+        node = node.c[ch];
+      }
+      node.w = word;
+    }
+  }
+
+  /** DFS over Trie to collect words */
+  _dfs(startNode, results, limit) {
+    const stack = [startNode];
+    while (stack.length && results.length < limit) {
+      const node = stack.pop();
+      if (node.w) results.push(node.w);
+      // Push children in reverse-alphabetical order so stack pops alphabetically
+      const keys = Object.keys(node.c).sort().reverse();
+      for (const k of keys) stack.push(node.c[k]);
+    }
+  }
+
+  _rankAutocomplete(prefix, a, b) {
+    const pa = AUTOCOMPLETE_PRIORITY[a] || 0;
+    const pb = AUTOCOMPLETE_PRIORITY[b] || 0;
+    if (pa !== pb) return pb - pa;
+
+    // Exact prefix match first
+    const aP = a.startsWith(prefix) ? 1 : 0;
+    const bP = b.startsWith(prefix) ? 1 : 0;
+    if (aP !== bP) return bP - aP;
+
+    // Shorter words first (more likely to be base words)
+    if (a.length !== b.length) return a.length - b.length;
+
+    return a.localeCompare(b, 'id');
+  }
+
+  _buildDeleteIndex(words) {
+    this._deleteIdx = new Map();
+
+    for (const word of words) {
+      if (word.length < 3) continue; // very short words don't need fuzzy
+
+      const deletes = _generateDeletes(word, SYMSPELL_MAX_DISTANCE, SYMSPELL_PREFIX_LEN);
+      for (const key of deletes) {
+        let bucket = this._deleteIdx.get(key);
+        if (!bucket) {
+          bucket = [];
+          this._deleteIdx.set(key, bucket);
+        }
+        bucket.push(word);
+      }
+    }
+  }
+
   _populateDefinitions(dictArray) {
     for (const entry of dictArray) {
-      const word = (entry.word || "").toLowerCase().trim();
+      const word = (entry?.word ?? '').toLowerCase().trim();
       if (!word) continue;
 
-      const existing = this._definitions.get(word);
-      const newDef = {
-        arti: entry.arti || null,
-        type: entry.type || null,
-      };
+      let arti        = entry.arti || null;
+      let isIncomplete = false;
 
+      if (arti) {
+        const v   = kbbiValidator.validate(arti);
+        isIncomplete = v.isIncomplete;
+        arti         = v.fixedText;
+      }
+
+      const existing = this._definitions.get(word);
       if (!existing) {
-        this._definitions.set(word, newDef);
+        this._definitions.set(word, { arti, type: entry.type || null, isIncomplete });
       } else {
-        // Merge multiple definitions for the same word
-        const combinedArti = existing.arti 
-          ? `${existing.arti}\n\n${newDef.arti}` 
-          : newDef.arti;
         this._definitions.set(word, {
-          arti: combinedArti,
-          type: existing.type || newDef.type,
+          arti       : existing.arti ? `${existing.arti}\n\n${arti}` : arti,
+          type       : existing.type || entry.type || null,
+          isIncomplete: existing.isIncomplete || isIncomplete,
         });
       }
     }
   }
 
-  /* --- IndexedDB Helpers (Shared Connection) --- */
+  // ── Definition Cache Helpers ──────────────────────────────────────────────
 
-  async _getFromCache() {
-    try {
-      const db = await _getDB();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, "readonly");
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(KEY_NAME);
+  _serializeDefs() {
+    const obj = Object.create(null);
+    for (const [k, v] of this._definitions) obj[k] = v;
+    return obj;
+  }
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    } catch (e) {
-      return null;
+  _loadCachedDefs(obj) {
+    for (const [k, v] of Object.entries(obj)) {
+      this._definitions.set(k, v);
     }
   }
 
-  async _fetchKbbiWordsFromGitHub() {
-    // Returns array of base word strings from GitHub dataset.
-    // If dataset is an object, we extract keys.
-    // If dataset is an array, we use it directly.
-    // This function also handles CORS by converting github.com blob URLs to raw.
-    if (!this._kbbiWordSources || !this._kbbiWordSources.length) return null;
+  // ── IndexedDB Helpers ─────────────────────────────────────────────────────
 
-    const toRaw = (url) => {
-      if (typeof url !== "string") return url;
-      if (url.startsWith("https://raw.githubusercontent.com/")) return url;
-      try {
-        const u = new URL(url);
-        const parts = u.pathname.split("/").filter(Boolean);
-        const blobIdx = parts.indexOf("blob");
-        if (blobIdx === -1) return url;
-        const user = parts[0];
-        const repo = parts[1];
-        const branch = parts[blobIdx + 1];
-        const rest = parts.slice(blobIdx + 2).join("/");
-        if (!user || !repo || !branch || !rest) return url;
-        return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${rest}`;
-      } catch {
-        return url;
-      }
-    };
-
-    for (const src of this._kbbiWordSources) {
-      const rawUrl = toRaw(src);
-      try {
-        const res = await fetch(rawUrl, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        if (Array.isArray(data)) {
-          return data;
-        }
-
-        // Some datasets are {"kata": {...}} (object), some are arrays of objects,
-        // some are {"kata": "def"}. We extract keys + normalize to string list.
-        if (data && typeof data === "object") {
-          // 1) object map: {"kata": ...}
-          if (!Array.isArray(Object.values(data)[0])) {
-            return Object.keys(data);
-          }
-        }
-
-        // If payload not recognized, skip.
-        return null;
-      } catch (e) {
-        console.warn("Failed fetch kbbi wordlist from:", rawUrl, e);
-      }
-    }
-    return null;
+  async _idbGet(store, key) {
+    try {
+      const db = await _getDB();
+      return new Promise((resolve) => {
+        const tx  = db.transaction(store, 'readonly');
+        const req = tx.objectStore(store).get(key);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror   = () => resolve(null);
+      });
+    } catch { return null; }
   }
 
-  async _saveToCache(words) {
+  async _idbPut(store, key, value) {
     try {
       const db = await _getDB();
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, "readwrite");
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put(words, KEY_NAME);
-
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        const tx  = db.transaction(store, 'readwrite');
+        const req = tx.objectStore(store).put(value, key);
+        req.onsuccess = () => resolve();
+        req.onerror   = () => reject(req.error);
       });
-    } catch (e) {
-      console.warn("Failed to cache dictionary:", e);
+    } catch (err) {
+      console.warn('IDB write error:', err);
     }
   }
 }

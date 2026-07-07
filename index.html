@@ -41,19 +41,60 @@
   <!-- App Loading Screen (Cat Theme) -->
   <div id="app-loading"
     style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #FFFDF5; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; transition: opacity 0.5s;">
-    <!-- Cat Walking Animation (Minimal inline SVG) -->
-    <svg width="80" height="80" viewBox="0 0 100 100"
-      style="fill: var(--text-primary); animation: gentleFloat 2s ease-in-out infinite alternate;">
-      <path d="M70,50 C70,39 61,30 50,30 C39,30 30,39 30,50 C30,61 39,70 50,70 C61,70 70,61 70,50 Z"
-        fill="var(--accent)" />
-      <path d="M40,32 L30,15 L25,35 Z" fill="var(--text-primary)" /> <!-- Left Ear -->
-      <path d="M60,32 L70,15 L75,35 Z" fill="var(--text-primary)" /> <!-- Right Ear -->
-      <!-- Paw footprint -->
-      <circle cx="50" cy="50" r="6" fill="var(--text-primary)" />
-      <circle cx="40" cy="40" r="3.5" fill="var(--text-primary)" />
-      <circle cx="50" cy="35" r="3.5" fill="var(--text-primary)" />
-      <circle cx="60" cy="40" r="3.5" fill="var(--text-primary)" />
-    </svg>
+    <!-- Cat Mascot (centered, same animations as editor) -->
+    <div class="loading-mascot-wrapper" id="loading-cat">
+      <svg class="cat-mascot-svg" viewBox="0 0 100 100" overflow="visible">
+        <g class="mascot-body-group animate-breathe">
+          <!-- Tail -->
+          <path d="M 75 80 Q 95 80 90 55" fill="none" stroke="var(--cat-cream)" stroke-width="8" stroke-linecap="round"
+            class="animate-tail" />
+
+          <!-- Body -->
+          <path d="M 30 95 C 30 70 70 70 70 95 Z" fill="var(--cat-cream)" />
+
+          <!-- Head -->
+          <circle cx="50" cy="55" r="28" fill="var(--cat-cream)" />
+
+          <!-- Ears -->
+          <g class="animate-ear-left" style="transform-origin: 35px 35px;">
+            <path d="M 26 38 L 18 15 L 43 30 Z" fill="var(--cat-cream)" />
+            <path d="M 28 36 L 22 20 L 40 31 Z" fill="var(--cat-pink)" />
+          </g>
+          <g class="animate-ear-right" style="transform-origin: 65px 35px;">
+            <path d="M 74 38 L 82 15 L 57 30 Z" fill="var(--cat-cream)" />
+            <path d="M 72 36 L 78 20 L 60 31 Z" fill="var(--cat-pink)" />
+          </g>
+
+          <!-- Blushed Cheeks -->
+          <ellipse cx="33" cy="62" rx="5" ry="3" fill="var(--cat-pink)" opacity="0.5" />
+          <ellipse cx="67" cy="62" rx="5" ry="3" fill="var(--cat-pink)" opacity="0.5" />
+
+          <!-- Eyes -->
+          <g id="mascot-eyes" class="animate-blink" style="transform-origin: 50px 55px;">
+            <!-- Left Eye -->
+            <path id="eye-left-shape" d="M 38 53 A 4 4 0 1 1 38 52.9" stroke="var(--text-primary)" stroke-width="3"
+              stroke-linecap="round" fill="var(--text-primary)" />
+            <!-- Right Eye -->
+            <path id="eye-right-shape" d="M 62 53 A 4 4 0 1 1 62 52.9" stroke="var(--text-primary)" stroke-width="3"
+              stroke-linecap="round" fill="var(--text-primary)" />
+            <!-- Catchlights -->
+            <circle cx="36.5" cy="51.5" r="1.5" fill="#fff" />
+            <circle cx="60.5" cy="51.5" r="1.5" fill="#fff" />
+          </g>
+
+          <!-- Nose -->
+          <polygon points="48,61 52,61 50,63" fill="var(--cat-pink)" />
+
+          <!-- Mouth -->
+          <path id="mascot-mouth" d="M 46 64 Q 50 68 50 64 Q 50 68 54 64" fill="none" stroke="var(--text-primary)"
+            stroke-width="2" stroke-linecap="round" />
+
+          <!-- Paws -->
+          <path d="M 32 95 C 32 85 42 85 42 95 Z" fill="var(--cat-cream)" stroke="rgba(0,0,0,0.05)" stroke-width="1" />
+          <path d="M 58 95 C 58 85 68 85 68 95 Z" fill="var(--cat-cream)" stroke="rgba(0,0,0,0.05)" stroke-width="1" />
+        </g>
+      </svg>
+    </div>
     <div class="loading-text-main">Sedang menyiapkan...</div>
     <div class="loading-text-sub">meow~ sebentar lagi ya~</div>
   </div>
@@ -100,30 +141,59 @@
           <div id="editor-area" class="editor-area" contenteditable="true"
             placeholder="Hai, sayang! Ketik tulisanmu di sini, aku siap membantumu~ meow!"></div>
 
-          <!-- Interactive Cat Mascot positioned in editor corner -->
           <div class="cat-mascot-wrapper" id="cat-mascot">
-            <svg class="cat-mascot-svg" viewBox="0 0 40 40">
-              <!-- Body / Head -->
-              <path d="M12,32 C12,24 15,19 20,19 C25,19 28,24 28,32 Z" fill="var(--cat-cream)" />
-              <circle cx="20" cy="18" r="8" fill="var(--cat-cream)" />
-              <!-- Ears -->
-              <path d="M13,13 L16,7 L19,13 Z" fill="var(--text-primary)" class="twitch-left" />
-              <path d="M27,13 L24,7 L21,13 Z" fill="var(--text-primary)" class="twitch-right" />
-              <path d="M14,12 L16,8 L18,12 Z" fill="var(--cat-pink)" class="twitch-left" />
-              <path d="M26,12 L24,8 L22,12 Z" fill="var(--cat-pink)" class="twitch-right" />
-              <!-- Eyes (Path modified dynamically by script) -->
-              <path id="mascot-eye-left" d="M 15 15 A 1.5 1.5 0 1 1 15 14.9" stroke="var(--text-primary)"
-                stroke-width="1.5" stroke-linecap="round" fill="none" class="animate-blink" />
-              <path id="mascot-eye-right" d="M 25 15 A 1.5 1.5 0 1 1 25 14.9" stroke="var(--text-primary)"
-                stroke-width="1.5" stroke-linecap="round" fill="none" class="animate-blink" />
-              <!-- Nose -->
-              <polygon points="19,17 21,17 20,18.5" fill="var(--cat-pink)" />
-              <!-- Mouth -->
-              <path id="mascot-mouth" d="M 18,20 Q 20,22 22,20" stroke="var(--text-primary)" stroke-width="1"
-                fill="none" />
-              <!-- Tail -->
-              <path d="M28,31 Q 33,32 32,25" stroke="var(--cat-cream)" stroke-width="3" stroke-linecap="round"
-                fill="none" class="animate-tail" />
+            <svg class="cat-mascot-svg" viewBox="0 0 100 100" overflow="visible">
+              <g class="mascot-body-group animate-breathe">
+                <!-- Tail -->
+                <path d="M 75 80 Q 95 80 90 55" fill="none" stroke="var(--cat-cream)" stroke-width="8"
+                  stroke-linecap="round" class="animate-tail" />
+
+                <!-- Body -->
+                <path d="M 30 95 C 30 70 70 70 70 95 Z" fill="var(--cat-cream)" />
+
+                <!-- Head -->
+                <circle cx="50" cy="55" r="28" fill="var(--cat-cream)" />
+
+                <!-- Ears -->
+                <g class="animate-ear-left" style="transform-origin: 35px 35px;">
+                  <path d="M 26 38 L 18 15 L 43 30 Z" fill="var(--cat-cream)" />
+                  <path d="M 28 36 L 22 20 L 40 31 Z" fill="var(--cat-pink)" />
+                </g>
+                <g class="animate-ear-right" style="transform-origin: 65px 35px;">
+                  <path d="M 74 38 L 82 15 L 57 30 Z" fill="var(--cat-cream)" />
+                  <path d="M 72 36 L 78 20 L 60 31 Z" fill="var(--cat-pink)" />
+                </g>
+
+                <!-- Blushed Cheeks -->
+                <ellipse cx="33" cy="62" rx="5" ry="3" fill="var(--cat-pink)" opacity="0.5" />
+                <ellipse cx="67" cy="62" rx="5" ry="3" fill="var(--cat-pink)" opacity="0.5" />
+
+                <!-- Eyes -->
+                <g id="mascot-eyes" class="animate-blink" style="transform-origin: 50px 55px;">
+                  <!-- Left Eye -->
+                  <path id="eye-left-shape" d="M 38 53 A 4 4 0 1 1 38 52.9" stroke="var(--text-primary)"
+                    stroke-width="3" stroke-linecap="round" fill="var(--text-primary)" />
+                  <!-- Right Eye -->
+                  <path id="eye-right-shape" d="M 62 53 A 4 4 0 1 1 62 52.9" stroke="var(--text-primary)"
+                    stroke-width="3" stroke-linecap="round" fill="var(--text-primary)" />
+                  <!-- Catchlights (only visible when open, handled via JS if needed, but blink scales the whole group) -->
+                  <circle cx="36.5" cy="51.5" r="1.5" fill="#fff" />
+                  <circle cx="60.5" cy="51.5" r="1.5" fill="#fff" />
+                </g>
+
+                <!-- Nose -->
+                <polygon points="48,61 52,61 50,63" fill="var(--cat-pink)" />
+
+                <!-- Mouth -->
+                <path id="mascot-mouth" d="M 46 64 Q 50 68 50 64 Q 50 68 54 64" fill="none" stroke="var(--text-primary)"
+                  stroke-width="2" stroke-linecap="round" />
+
+                <!-- Paws -->
+                <path d="M 32 95 C 32 85 42 85 42 95 Z" fill="var(--cat-cream)" stroke="rgba(0,0,0,0.05)"
+                  stroke-width="1" />
+                <path d="M 58 95 C 58 85 68 85 68 95 Z" fill="var(--cat-cream)" stroke="rgba(0,0,0,0.05)"
+                  stroke-width="1" />
+              </g>
             </svg>
           </div>
         </div>
@@ -137,7 +207,8 @@
             <svg style="width:12px;height:12px;fill:currentColor;margin-right:2px;" viewBox="0 0 24 24">
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 11H7v-2h4V7h2v6z" />
             </svg>
-            <span id="stats-read-time-val">< 1 menit</span>
+            <span id="stats-read-time-val">
+              < 1 menit</span>
           </div>
         </div>
       </div>
@@ -146,13 +217,33 @@
     <!-- Tab 2: Sketsa Referensi -->
     <section id="view-sketsa" class="view-panel" style="height: 100%;">
       <div class="sketch-container">
+        <!-- Mobile-first upload dropzone -->
+        <div class="sketch-upload-zone" id="sketch-upload-zone" role="button" tabindex="0"
+          aria-label="Unggah atau ambil foto gambar">
+          <input type="file" id="sketch-upload-input" accept="image/*" hidden>
+          <div class="sketch-upload-inner">
+            <div class="sketch-upload-icon-wrap">
+              <svg class="sketch-upload-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 13v6H5v-6H3v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2zM13 4.83l2.59 2.58L17 6l-5-5-5 5 1.41 1.41L11 4.83V15h2V4.83z" />
+              </svg>
+            </div>
+            <div class="sketch-upload-text">Ketuk untuk unggah atau ambil foto</div>
+            <div class="sketch-upload-hint">Dari galeri maupun kamera · JPG, PNG, WEBP</div>
+          </div>
+          <span class="sketch-upload-badge" id="sketch-upload-badge" hidden></span>
+        </div>
+
         <!-- Search bar -->
-        <div class="search-wrapper">
-          <svg class="search-icon-prefix" viewBox="0 0 24 24">
-            <path
-              d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-          </svg>
-          <input type="text" id="sketch-search-input" class="search-input" placeholder="Cari sketsa untuk digambar...">
+        <div class="search-wrapper" style="display:flex; gap:8px;">
+          <div style="position:relative; flex:1;">
+            <svg class="search-icon-prefix" viewBox="0 0 24 24"
+              style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:20px; height:20px; fill:var(--text-secondary);">
+              <path
+                d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+            </svg>
+            <input type="text" id="sketch-search-input" class="search-input" placeholder="Cari sketsa..."
+              style="width:100%; padding-left:40px;">
+          </div>
         </div>
 
         <!-- Grid of results -->
@@ -193,25 +284,29 @@
   <nav class="bottom-tab-bar glass">
     <button class="tab-item active" data-tab="tulis">
       <svg viewBox="0 0 24 24">
-        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+        <path
+          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
       </svg>
       <span>Tulis</span>
     </button>
     <button class="tab-item" data-tab="sketsa">
       <svg viewBox="0 0 24 24">
-        <path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
+        <path
+          d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
       </svg>
       <span>Sketsa</span>
     </button>
     <button class="tab-item" data-tab="draft">
       <svg viewBox="0 0 24 24">
-        <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+        <path
+          d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
       </svg>
       <span>Draft</span>
     </button>
     <button class="tab-item" data-tab="mood">
       <svg viewBox="0 0 24 24">
-        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        <path
+          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
       </svg>
       <span>Mood</span>
     </button>
@@ -236,7 +331,8 @@
       <h3 class="settings-title">Pengaturan</h3>
       <button class="icon-btn" id="btn-close-settings">
         <svg viewBox="0 0 24 24">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+          <path
+            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
         </svg>
       </button>
     </div>
@@ -265,20 +361,44 @@
     <div class="settings-group">
       <label class="settings-label">Tema Warna</label>
       <div class="theme-picker" id="theme-picker">
-        <div class="theme-option active" data-theme="light" style="background: #FFFDF5; border-color: #F5C542;" title="Classic Light">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/></svg>
+        <div class="theme-option active" data-theme="light" style="background: #FFFDF5; border-color: #F5C542;"
+          title="Classic Light">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          </svg>
         </div>
-        <div class="theme-option" data-theme="pink" style="background: #FFF0F5; border-color: #FFB5C2;" title="Soft Pink">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <div class="theme-option" data-theme="pink" style="background: #FFF0F5; border-color: #FFB5C2;"
+          title="Soft Pink">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
         </div>
-        <div class="theme-option" data-theme="lavender" style="background: #F5F0FF; border-color: #C9B5FF;" title="Lavender">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <div class="theme-option" data-theme="lavender" style="background: #F5F0FF; border-color: #C9B5FF;"
+          title="Lavender">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
         </div>
-        <div class="theme-option" data-theme="rosegold" style="background: #FFF5F0; border-color: #F0A8A8;" title="Rose Gold">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <div class="theme-option" data-theme="rosegold" style="background: #FFF5F0; border-color: #F0A8A8;"
+          title="Rose Gold">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
         </div>
-        <div class="theme-option" data-theme="mint" style="background: #F0FFF5; border-color: #A8F0C0;" title="Mint Green">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 0-7.07 17.07A10 10 0 1 0 12 2z"/><path d="M12 6v6l4 2"/></svg>
+        <div class="theme-option" data-theme="mint" style="background: #F0FFF5; border-color: #A8F0C0;"
+          title="Mint Green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a10 10 0 0 0-7.07 17.07A10 10 0 1 0 12 2z" />
+            <path d="M12 6v6l4 2" />
+          </svg>
         </div>
       </div>
     </div>
@@ -298,7 +418,8 @@
         <h3 class="sketch-modal-title">Sketsa Referensi</h3>
         <button class="icon-btn" id="btn-close-sketch">
           <svg viewBox="0 0 24 24">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+            <path
+              d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
           </svg>
         </button>
       </div>
@@ -336,7 +457,8 @@
         </p>
         <button class="capsule-btn" id="btn-download-sketch">
           <svg style="width:18px;height:18px;fill:currentColor;" viewBox="0 0 24 24">
-            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
+            <path
+              d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
           </svg>
           Download Gambar Sketsa (PNG)
         </button>

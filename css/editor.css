@@ -135,8 +135,8 @@
   position: absolute;
   bottom: 24px;
   right: 24px;
-  width: 56px;
-  height: 56px;
+  width: 100px;
+  height: 100px;
   pointer-events: none;
   z-index: 10;
   opacity: 0.9;
@@ -145,8 +145,8 @@
 
 @media (min-width: 768px) {
   .cat-mascot-wrapper {
-    width: 76px;
-    height: 76px;
+    width: 140px;
+    height: 140px;
     bottom: 30px;
     right: 30px;
   }

@@ -42,32 +42,64 @@
 
 /* Mascot idle: Cat Tail Wagging */
 @keyframes catTailWag {
-  0% {
-    transform: rotate(-4deg);
-  }
-  100% {
-    transform: rotate(4deg);
-  }
+  0% { transform: rotate(-5deg); }
+  100% { transform: rotate(5deg); }
 }
 
 .animate-tail {
-  transform-origin: 50% 90%;
+  transform-origin: 85px 65px;
   animation: catTailWag 2s ease-in-out infinite alternate;
 }
 
 /* Mascot idle: Cat Blink */
 @keyframes catBlink {
-  0%, 90%, 100% {
-    transform: scaleY(1);
-  }
-  95% {
-    transform: scaleY(0.1);
-  }
+  0%, 90%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
 }
 
 .animate-blink {
-  transform-origin: 50% 50%;
-  animation: catBlink 4s infinite;
+  animation: catBlink 5s infinite;
+}
+
+/* Mascot idle: Breathe */
+@keyframes catBreathe {
+  0% { transform: scaleY(1); }
+  100% { transform: scaleY(1.03) translateY(-1px); }
+}
+
+.animate-breathe {
+  transform-origin: 50px 95px;
+  animation: catBreathe 2s ease-in-out infinite alternate;
+}
+
+/* Mascot idle: Ear Twitch */
+@keyframes earTwitchLeft {
+  0%, 90%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(-8deg); }
+  95% { transform: rotate(4deg); }
+}
+@keyframes earTwitchRight {
+  0%, 92%, 100% { transform: rotate(0deg); }
+  94% { transform: rotate(8deg); }
+  97% { transform: rotate(-4deg); }
+}
+
+.animate-ear-left {
+  animation: earTwitchLeft 6s infinite;
+}
+.animate-ear-right {
+  animation: earTwitchRight 7s infinite;
+}
+
+/* Pop-in animation for Mascot state change */
+@keyframes catPop {
+  0% { transform: scale(0.9) translateY(5px); }
+  50% { transform: scale(1.05) translateY(-2px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+.mascot-pop {
+  animation: catPop 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 /* Shimmer Loading Skeleton */

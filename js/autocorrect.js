@@ -1,180 +1,223 @@
 /**
- * autocorrect.js - Candidate generation + scoring for typo correction
+ * autocorrect.js — Candidate generation + scoring for typo correction.
+ *
+ * Architecture:
+ * 1. Priority maps (exact O(1) lookup): typoMap → tidakBakuMap
+ * 2. SymSpell-style delete index (O(k) candidate lookup, pre-built in Dictionary)
+ * 3. Phonetic variants (deterministic rules per-query)
+ * 4. Trie prefix traversal (only for very short inputs)
+ * 5. Bounded Damerau-Levenshtein scoring on candidate set only
+ *    (NEVER full dictionary scan)
+ *
+ * Complexity: O(k) candidates × O(n·m) scoring where k ≪ |dictionary|
  */
 
-import { damerauLevenshteinDistance } from "./edit-distance.js";
-import { checkCommonTypos, generatePhoneticVariants, getCommonTypoMap } from "./typo-patterns.js";
+import { boundedDamerauLevenshteinDistance } from './edit-distance.js';
+import { generatePhoneticVariants, getCommonTypoMap } from './typo-patterns.js';
+
+// ---------------------------------------------------------------------------
+// Word frequency table — higher scores bubble up in ranked suggestions.
+// Covers top ~200 most commonly used Indonesian words.
+// ---------------------------------------------------------------------------
+const WORD_FREQUENCY = Object.freeze(Object.assign(Object.create(null), {
+  // Function words (very high frequency)
+  'yang'    : 200, 'di'     : 195, 'ini'    : 190, 'itu'    : 190,
+  'dan'     : 185, 'dari'   : 180, 'ke'     : 175, 'dengan' : 170,
+  'untuk'   : 165, 'tidak'  : 160, 'adalah' : 155, 'dalam'  : 150,
+  'pada'    : 145, 'oleh'   : 140, 'akan'   : 135, 'juga'   : 130,
+  'karena'  : 125, 'bisa'   : 120, 'dapat'  : 115, 'atau'   : 110,
+  'ada'     : 105, 'lebih'  : 100, 'sudah'  : 95,  'saya'   : 90,
+  'belum'   : 85,  'masih'  : 80,  'bila'   : 75,  'agar'   : 70,
+  'sehingga': 65,  'namun'  : 60,  'tetapi' : 55,  'bahwa'  : 50,
+  'antara'  : 45,  'para'   : 40,  'telah'  : 35,  'harus'  : 30,
+  'sangat'  : 25,  'lain'   : 20,  'sama'   : 18,  'pun'    : 15,
+  'kalau'   : 15,  'apabila': 14,  'ketika' : 13,  'setelah': 12,
+  'sebelum' : 11,  'kemudian': 10,
+
+  // Content words (medium frequency)
+  'kerja'   : 35, 'belajar' : 30, 'makan'  : 28, 'minum'  : 25,
+  'bicara'  : 22, 'jalan'   : 20, 'lihat'  : 18, 'tulis'  : 16,
+  'baca'    : 15, 'pikir'   : 14, 'cari'   : 13, 'beli'   : 12,
+  'jual'    : 11, 'buat'    : 10, 'kirim'  : 9,  'ambil'  : 8,
+
+  // Technology words
+  'aplikasi': 40, 'sistem'  : 38, 'data'   : 36, 'program': 34,
+  'komputer': 32, 'internet': 30, 'teknologi': 28, 'digital': 26,
+
+  // Common targets for autocorrect
+  'risiko'  : 25, 'analisis': 24, 'aktif'  : 23, 'paham'  : 22,
+  'praktik' : 21, 'izin'    : 20, 'zaman'  : 19, 'salat'  : 18,
+}));
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+function commonPrefixLength(a, b) {
+  const max = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < max && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i;
+}
 
 /**
- * @typedef {object} AutocorrectOptions
- * @property {number} [maxEditDistance] - maximum edit distance to accept
- * @property {number} [limit] - max suggestions
- * @property {number} [prefixMinLen] - min prefix length to generate candidates
- * @property {number} [prefixMaxLen] - max prefix length to generate candidates
+ * Sørensen–Dice bigram coefficient — fast character overlap metric.
+ * Returns 0..1 (1 = identical).
  */
+function diceCoefficient(a, b) {
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
 
-// Common Indonesian word frequency for better ranking (higher = more common)
-const WORD_FREQUENCY = {
-  'tidak': 100,
-  'yang': 95,
-  'dan': 90,
-  'dengan': 85,
-  'untuk': 80,
-  'dalam': 75,
-  'adalah': 70,
-  'ini': 65,
-  'itu': 65,
-  'saya': 60,
-  'kamu': 55,
-  'dia': 50,
-  'mereka': 45,
-  'kita': 45,
-  'bisa': 40,
-  'dapat': 40,
-  'akan': 35,
-  'dari': 35,
-  'ke': 30,
-  'di': 30,
-  'pada': 25,
-  'oleh': 25,
-  'para': 20,
-  'telah': 20,
-  'belum': 15,
-  'sudah': 15,
-  'masih': 15,
-  'lagi': 15,
-  'akan': 15,
-  'harus': 10,
-  'wajib': 10,
-  'boleh': 10,
-  'boleh': 10,
-  'bisa': 10,
-  'dapat': 10,
-  'menulis': 20,
-  'membaca': 20,
-  'kerja': 15,
-  'bekerja': 15,
-  'makan': 20,
-  'minum': 15,
-};
+  const bigramsA = new Map();
+  for (let i = 0; i < a.length - 1; i++) {
+    const bg = a.charCodeAt(i) * 65536 + a.charCodeAt(i + 1);
+    bigramsA.set(bg, (bigramsA.get(bg) || 0) + 1);
+  }
 
+  let overlap = 0;
+  for (let i = 0; i < b.length - 1; i++) {
+    const bg = b.charCodeAt(i) * 65536 + b.charCodeAt(i + 1);
+    const cnt = bigramsA.get(bg) || 0;
+    if (cnt > 0) {
+      overlap++;
+      bigramsA.set(bg, cnt - 1);
+    }
+  }
+
+  return (2 * overlap) / (a.length + b.length - 2);
+}
+
+// ---------------------------------------------------------------------------
+// Source priority for ranking (lower = higher priority)
+// ---------------------------------------------------------------------------
+const SOURCE_RANK = Object.freeze({
+  typo_map       : 0,
+  common_typo_map: 1,
+  tidak_baku_map : 2,
+  phonetic       : 3,
+  symspell       : 4,
+  prefix         : 5,
+});
+
+// ---------------------------------------------------------------------------
+// Autocorrect Class
+// ---------------------------------------------------------------------------
 export class Autocorrect {
   /**
    * @param {object} deps
    * @param {import('./dictionary.js').Dictionary} deps.dictionary
-   * @param {Record<string,string>|object} deps.tidakBakuMap
-   * @param {Record<string,string>|object} deps.typoMap
+   * @param {Record<string,string>} deps.tidakBakuMap
+   * @param {Record<string,string>} deps.typoMap
    */
   constructor({ dictionary, tidakBakuMap = {}, typoMap = {} }) {
-    this.dictionary = dictionary;
+    this.dictionary   = dictionary;
     this.tidakBakuMap = tidakBakuMap;
-    this.typoMap = typoMap;
-    this.commonTypoMap = getCommonTypoMap();
+    this.typoMap      = typoMap;
+    this._commonTypoMap = getCommonTypoMap();
+  }
+
+  /** Get frequency score (higher = more common) */
+  _freq(word) {
+    return WORD_FREQUENCY[word] || 0;
   }
 
   /**
-   * Get word frequency score (higher = more common)
-   * @param {string} word - The word to check
-   * @returns {number} - Frequency score
-   */
-  _getFrequencyScore(word) {
-    return WORD_FREQUENCY[word] || 1;
-  }
-
-  /**
-   * @param {string} input
-   * @param {AutocorrectOptions} opts
+   * Generate ranked correction suggestions for a misspelled word.
+   *
+   * @param {string} input - The misspelled word
+   * @param {object} [opts]
+   * @param {number} [opts.maxEditDistance=2]
+   * @param {number} [opts.limit=5]
    * @returns {Array<{word:string, dist:number, source:string}>}
    */
   suggest(input, opts = {}) {
-    const w = (input ?? "").trim().toLowerCase();
-    if (!w) return [];
+    const w = (input ?? '').trim().toLowerCase();
+    if (!w || w.length < 2) return [];
 
-    const maxEditDistance = opts.maxEditDistance ?? 2;
-    const limit = opts.limit ?? 5;
-    const prefixMinLen = opts.prefixMinLen ?? 1;
-    const prefixMaxLen = opts.prefixMaxLen ?? Math.min(4, w.length);
+    const maxDist = opts.maxEditDistance ?? 2;
+    const limit   = opts.limit ?? 5;
 
-    // 1) typo exact mapping has priority
-    const mapped = this.typoMap && this.typoMap[w];
-    const commonMapped = this.commonTypoMap && this.commonTypoMap[w];
+    const seen       = new Set();
     const candidates = [];
-    const seen = new Set();
 
-    const pushCandidate = (word, source) => {
-      const cw = (word ?? "").trim().toLowerCase();
+    const push = (word, source) => {
+      const cw = (word ?? '').trim().toLowerCase();
       if (!cw || seen.has(cw)) return;
       seen.add(cw);
-      candidates.push({ word: cw, source, dist: Infinity });
+      candidates.push({ word: cw, source, dist: Infinity, prefix: 0, similarity: 0, lengthDelta: 0 });
     };
 
-    if (mapped) {
-      pushCandidate(mapped, "typo_map");
+    // 1. Priority maps — exact O(1) lookup
+    const typoHit  = this.typoMap[w];
+    const tbHit    = this.tidakBakuMap[w];
+    const commonHit = this._commonTypoMap[w];
+
+    if (typoHit)   push(typoHit,  'typo_map');
+    if (tbHit)     push(tbHit,    'tidak_baku_map');
+    if (commonHit && commonHit !== typoHit && commonHit !== tbHit) {
+      push(commonHit, 'common_typo_map');
     }
 
-    if (commonMapped) {
-      pushCandidate(commonMapped, "common_typo_map");
+    // 2. Phonetic variants (deterministic, cheap)
+    const variants = generatePhoneticVariants(w);
+    for (const v of variants) {
+      if (this.dictionary && this.dictionary.has(v)) push(v, 'phonetic');
     }
 
-    // 2) tidak-baku mapping candidates
-    if (this.tidakBakuMap && this.tidakBakuMap[w]) {
-      pushCandidate(this.tidakBakuMap[w], "tidak_baku_map");
+    // 3. SymSpell-style fuzzy candidates (O(deletes) lookup via pre-built index)
+    if (this.dictionary && typeof this.dictionary.fuzzyCandidates === 'function') {
+      const fuzzy = this.dictionary.fuzzyCandidates(w, maxDist, 100);
+      for (const c of fuzzy) push(c, 'symspell');
     }
 
-    // 3) Generate phonetic variants for additional candidates
-    const phoneticVariants = generatePhoneticVariants(w);
-    for (const variant of phoneticVariants) {
-      if (this.dictionary.has(variant)) {
-        pushCandidate(variant, "phonetic");
-      }
+    // 4. Trie prefix candidates (only for short inputs, keeps count low)
+    if (w.length <= 5 && this.dictionary && typeof this.dictionary.suggest === 'function') {
+      const prefixResults = this.dictionary.suggest(w.slice(0, Math.min(3, w.length)), 20);
+      for (const c of prefixResults) push(c, 'prefix');
     }
 
-    // 4) prefix candidates via existing binary-search dictionary.suggest
-    // Use incremental prefixes; this is fast and avoids brute-force.
-    const prefixCandidates = new Set();
-    for (let k = prefixMinLen; k <= prefixMaxLen; k++) {
-      const prefix = w.slice(0, k);
-      if (!prefix) continue;
-      const list = this.dictionary.suggest(prefix, 10);
-      for (const cand of list) prefixCandidates.add(cand);
-      if (prefixCandidates.size >= 80) break;
-    }
-    for (const cand of prefixCandidates) pushCandidate(cand, "prefix");
-
-    // 5) Score candidates using Damerau-Levenshtein
+    // 5. Score all candidates — ONLY against the small candidate set
     for (const c of candidates) {
-      // quick length filter
-      if (Math.abs(c.word.length - w.length) > maxEditDistance + 1) {
-        c.dist = maxEditDistance + 2;
+      const lenDiff = Math.abs(c.word.length - w.length);
+      if (lenDiff > maxDist + 1) {
+        c.dist = maxDist + 2;
         continue;
       }
-      c.dist = damerauLevenshteinDistance(w, c.word);
+      c.dist        = boundedDamerauLevenshteinDistance(w, c.word, maxDist + 1);
+      c.prefix      = commonPrefixLength(w, c.word);
+      c.similarity  = diceCoefficient(w, c.word);
+      c.lengthDelta = lenDiff;
     }
 
-    // 6) Rank: prefer lower distance; then prefer typo/common sources; then frequency
-    const sourceRank = {
-      typo_map: 0,
-      common_typo_map: 1,
-      tidak_baku_map: 2,
-      phonetic: 3,
-      prefix: 4,
-    };
-
-    const ranked = candidates
-      .filter((c) => c.dist <= maxEditDistance + 1)
+    // 6. Rank and filter
+    return candidates
+      .filter(c => c.dist <= maxDist + 1)
       .sort((a, b) => {
+        // a) Edit distance (lower is better)
         if (a.dist !== b.dist) return a.dist - b.dist;
-        const ra = sourceRank[a.source] ?? 9;
-        const rb = sourceRank[b.source] ?? 9;
+
+        // b) Source priority
+        const ra = SOURCE_RANK[a.source] ?? 9;
+        const rb = SOURCE_RANK[b.source] ?? 9;
         if (ra !== rb) return ra - rb;
-        // Prefer more common words
-        const fa = this._getFrequencyScore(a.word);
-        const fb = this._getFrequencyScore(b.word);
+
+        // c) Common prefix length (longer prefix = better)
+        if (a.prefix !== b.prefix) return b.prefix - a.prefix;
+
+        // d) Bigram similarity (higher = better)
+        if (Math.abs(a.similarity - b.similarity) > 0.01) return b.similarity - a.similarity;
+
+        // e) Length delta (closer length = better)
+        if (a.lengthDelta !== b.lengthDelta) return a.lengthDelta - b.lengthDelta;
+
+        // f) Word frequency (more common = better)
+        const fa = this._freq(a.word);
+        const fb = this._freq(b.word);
         if (fa !== fb) return fb - fa;
+
+        // g) Lexicographic tie-break
         return a.word.localeCompare(b.word);
       })
       .slice(0, limit);
-
-    return ranked;
   }
 }

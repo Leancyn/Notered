@@ -16,6 +16,7 @@ import { Export } from "./export.js";
 import { KbbiApi } from "./kbbi-api.js";
 import { MoodTracker } from "./mood-tracker.js";
 import { kbbiParser } from "./kbbi-parser.js";
+import { kbbiValidator } from "./kbbi-validator.js";
 
 class App {
   constructor() {
@@ -188,6 +189,90 @@ class App {
       });
     }
 
+    // Sketch file upload (mobile-first dropzone)
+    const uploadZone = document.getElementById("sketch-upload-zone");
+    const uploadInput = document.getElementById("sketch-upload-input");
+    const uploadBadge = document.getElementById("sketch-upload-badge");
+
+    const triggerUpload = () => uploadInput && uploadInput.click();
+    const handleUploadFile = (file) => {
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        this.ui.showToast("Hmm, file bukan gambar. Pilih JPG/PNG ya~", "error");
+        return;
+      }
+      const objectUrl = URL.createObjectURL(file);
+      if (uploadBadge) {
+        uploadBadge.textContent = "✓ " + (file.name || "Gambar dipilih");
+        uploadBadge.hidden = false;
+      }
+      // Show the sketch modal acting like a photo from search
+      this._openSketchModal({
+        id: "upload_" + Date.now(),
+        regular: objectUrl,
+        thumb: objectUrl,
+        alt: file.name || "Foto lokal",
+        author: "Pengguna (Upload Lokal)",
+        authorUrl: null,
+        width: 800,
+        height: 800,
+      });
+      // Clear input so same file can be chosen again
+      uploadInput.value = "";
+    };
+
+    if (uploadZone && uploadInput) {
+      // Tap / click to open picker
+      uploadZone.addEventListener("click", (e) => {
+        // Ignore if the click originated from the (hidden) input itself
+        if (e.target === uploadInput) return;
+        triggerUpload();
+      });
+      // Keyboard accessibility (Enter / Space)
+      uploadZone.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          triggerUpload();
+        }
+      });
+
+      // File selected
+      uploadInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        handleUploadFile(file);
+      });
+
+      // Drag & drop (desktop enhancement)
+      ["dragenter", "dragover"].forEach((evt) =>
+        uploadZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          uploadZone.classList.add("dragover");
+        }),
+      );
+      ["dragleave", "drop"].forEach((evt) =>
+        uploadZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          uploadZone.classList.remove("dragover");
+        }),
+      );
+      uploadZone.addEventListener("drop", (e) => {
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        handleUploadFile(file);
+      });
+
+      // Paste image from clipboard
+      uploadZone.addEventListener("paste", (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            handleUploadFile(item.getAsFile());
+            break;
+          }
+        }
+      });
+    }
+
     // Theme picker
     document.querySelectorAll(".theme-option").forEach((opt) => {
       opt.addEventListener("click", () => {
@@ -198,7 +283,7 @@ class App {
         Storage.saveSettings(curr);
         document.querySelectorAll(".theme-option").forEach((o) => o.classList.remove("active"));
         opt.classList.add("active");
-        this.ui.showToast(`Tema ${theme} diterapkan! 🌸`, "success");
+        this.ui.showToast(`Tema ${theme} diterapkan!`, "success");
       });
     });
   }
@@ -492,34 +577,67 @@ class App {
     // Now fetch definition asynchronously
     try {
       // Use dictionary's built-in definition lookup (from dictionary__JSON.json)
-      // Try multiple case variations to ensure we find the word
-      const wordLower = data.word.toLowerCase();
+      // If it's a typo/tidak baku, look up the corrected word instead!
+      const wordToLookup = data.bakuForm || (data.suggestions && data.suggestions.length > 0 ? data.suggestions[0] : data.word);
+      const wordLower = wordToLookup.toLowerCase();
       let definition = this.dictionary.getDefinition(wordLower);
-      
+
       // If not found, try original case
       if (!definition) {
-        definition = this.dictionary.getDefinition(data.word);
+        definition = this.dictionary.getDefinition(wordToLookup);
       }
-      
+
       // If still not found, try capitalized
-      if (!definition && data.word.length > 0) {
-        const capitalized = data.word.charAt(0).toUpperCase() + data.word.slice(1).toLowerCase();
+      if (!definition && wordToLookup.length > 0) {
+        const capitalized = wordToLookup.charAt(0).toUpperCase() + wordToLookup.slice(1).toLowerCase();
         definition = this.dictionary.getDefinition(capitalized);
       }
 
-      const defText = definition && definition.arti ? definition.arti : null;
+      let defText = definition && definition.arti ? definition.arti : null;
       const posText = definition && definition.type ? definition.type : null;
 
-      // Format definition using KBBI parser
+      // Fallback: use the KBBI API lookup (validated + formatted) when the
+      // in-memory dictionary does not have the word. This wires KbbiApi into
+      // the live system instead of leaving it as dead code.
+      if (!defText) {
+        try {
+          const apiResult = await KbbiApi.lookup(wordToLookup);
+          if (apiResult && apiResult.def) {
+            defText = apiResult.def;
+            if (apiResult.isIncomplete) {
+              console.warn("KBBI definition may be incomplete:", apiResult.def);
+            }
+          }
+        } catch (apiErr) {
+          console.warn("KBBI API lookup failed:", apiErr);
+        }
+      }
+
+      // Validate and format definition using KBBI validator first
+      let validatedDef = "";
       let formattedDef = "";
       if (defText) {
-        // Use the KBBI parser to format the definition
-        const parsed = kbbiParser.parse(defText);
+        // Step 1: Validate the raw definition text
+        const validation = kbbiValidator.validate(defText);
+
+        if (validation.isIncomplete) {
+          console.warn("KBBI definition may be incomplete:", validation.warning);
+        }
+
+        if (validation.issues && validation.issues.length > 0) {
+          console.warn("KBBI validation issues:", validation.issues);
+        }
+
+        // Use the validated/fixed text
+        validatedDef = validation.fixedText;
+
+        // Step 2: Format the validated definition using KBBI parser
+        const parsed = kbbiParser.parse(validatedDef);
         if (parsed) {
-          formattedDef = kbbiParser.format(parsed);
+          formattedDef = kbbiParser.format(parsed) || validatedDef;
         } else {
-          // Fallback to simple text if parsing fails
-          formattedDef = this._escapeHtml(defText);
+          // Fallback to validated text if parsing fails
+          formattedDef = validatedDef;
         }
       }
 

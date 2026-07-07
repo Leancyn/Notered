@@ -1,257 +1,324 @@
 /**
- * stemmer.js - Simplified Indonesian Word Stemmer
- * 
- * Implements Indonesian prefix, suffix, and confix removal rules
- * based on Nazief-Adriani principles with morphological exceptions.
+ * stemmer.js - Accurate Indonesian Word Stemmer (Enhanced Nazief-Adriani)
+ *
+ * Key improvements over previous version:
+ * - Dictionary-validation step after each stripping pass (prevents over-stemming)
+ * - Correct MeD morphophonemic rules (e.g. menulis → tulis, bukan tnulis)
+ * - Confix (me-...-kan, me-...-i) stripping support
+ * - Kata ulang (reduplication) handled before prefix stripping
  */
 
-// Irregular stems mapping
-const IRREGULAR_WORDS = {
-  // Original entries
-  'belajar': 'ajar',
-  'pelajar': 'ajar',
-  'mengajar': 'ajar',
-  'pengajar': 'ajar',
-  'pembelajaran': 'ajar',
-  'mempunyai': 'punya',
-  'menyanyi': 'nyanyi',
-  'penyanyi': 'nyanyi',
-  'beterbangan': 'terbang',
-  'penerbangan': 'terbang',
-  'berterbangan': 'terbang',
-  'menerbangkan': 'terbang',
-  'melihat': 'lihat',
-  'kelihatan': 'lihat',
-  'penglihatan': 'lihat',
-  
-  // Additional common words
-  'membaca': 'baca',
-  'pembaca': 'baca',
-  'pembacaan': 'baca',
-  'menulis': 'tulis',
-  'penulisan': 'tulis',
-  'menulisnya': 'tulis',
-  'makan': 'makan',
-  'pemakan': 'makan',
-  'pemakanan': 'makan',
-  'minum': 'minum',
-  'pemimunan': 'minum',
-  'bekerja': 'kerja',
-  'pekerjaan': 'kerja',
-  'pekerja': 'kerja',
-  'pekerjaan': 'kerja',
-  'berjalan': 'jalan',
-  'jalan': 'jalan',
-  'melajang': 'lajang',
-  'lajang': 'lajang',
-  'berlari': 'lari',
-  'lari': 'lari',
-  'bermain': 'main',
-  'permainan': 'main',
-  'berbicara': 'bicara',
-  'berbicara': 'bicara',
-  'pembicaraan': 'bicara',
-  'bersekolah': 'sekolah',
-  'sekolah': 'sekolah',
-  'sekolahan': 'sekolah',
-  'bekerja': 'kerja',
-  'kerja': 'kerja',
-  'pekerja': 'kerja',
-  'pekerjaan': 'kerja',
-};
+// ---- Irregular stems mapping (exact lookup, O(1)) -----------------------
+const IRREGULAR_WORDS = new Map([
+  // learn / teach
+  ['belajar', 'ajar'],  ['pelajar', 'ajar'],    ['pembelajaran', 'ajar'],
+  ['mengajar', 'ajar'], ['pengajaran', 'ajar'],
+
+  // have
+  ['mempunyai', 'punya'], ['dipunyai', 'punya'],
+
+  // sing
+  ['menyanyi', 'nyanyi'], ['penyanyi', 'nyanyi'], ['nyanyian', 'nyanyi'],
+
+  // fly
+  ['terbang', 'terbang'], ['penerbangan', 'terbang'], ['menerbangkan', 'terbang'],
+  ['berterbangan', 'terbang'],
+
+  // see
+  ['melihat', 'lihat'], ['kelihatan', 'lihat'], ['penglihatan', 'lihat'],
+  ['terlihat', 'lihat'],
+
+  // read
+  ['membaca', 'baca'],  ['pembaca', 'baca'],  ['pembacaan', 'baca'],
+  ['bacaan', 'baca'],
+
+  // write
+  ['menulis', 'tulis'], ['penulis', 'tulis'], ['penulisan', 'tulis'],
+  ['tulisan', 'tulis'], ['menuliskan', 'tulis'],
+
+  // eat / drink
+  ['makan', 'makan'], ['memakan', 'makan'], ['dimakan', 'makan'],
+  ['minum', 'minum'], ['meminum', 'minum'], ['diminum', 'minum'],
+
+  // work
+  ['bekerja', 'kerja'], ['pekerjaan', 'kerja'], ['pekerja', 'kerja'],
+  ['mengerjakan', 'kerja'], ['dikerjakan', 'kerja'],
+
+  // walk / run
+  ['berjalan', 'jalan'],  ['perjalanan', 'jalan'],
+  ['berlari', 'lari'],
+
+  // play
+  ['bermain', 'main'], ['permainan', 'main'],
+
+  // speak
+  ['berbicara', 'bicara'], ['pembicaraan', 'bicara'],
+
+  // school
+  ['bersekolah', 'sekolah'], ['sekolahan', 'sekolah'],
+
+  // know
+  ['mengetahui', 'tahu'], ['pengetahuan', 'tahu'], ['diketahui', 'tahu'],
+
+  // want / will
+  ['menginginkan', 'ingin'], ['keinginan', 'ingin'],
+
+  // give
+  ['memberikan', 'beri'], ['pemberian', 'beri'], ['diberikan', 'beri'],
+
+  // take
+  ['mengambil', 'ambil'], ['pengambilan', 'ambil'], ['diambil', 'ambil'],
+
+  // buy / sell
+  ['membeli', 'beli'],  ['pembelian', 'beli'],
+  ['menjual', 'jual'], ['penjualan', 'jual'],
+
+  // open / close
+  ['membuka', 'buka'],  ['pembukaan', 'buka'],
+  ['menutup', 'tutup'], ['penutupan', 'tutup'],
+
+  // use
+  ['menggunakan', 'guna'], ['penggunaan', 'guna'],
+
+  // do
+  ['melakukan', 'laku'], ['pelaksanaan', 'laku'],
+
+  // make
+  ['membuat', 'buat'], ['pembuatan', 'buat'],
+
+  // help
+  ['membantu', 'bantu'], ['bantuan', 'bantu'],
+
+  // find
+  ['menemukan', 'temu'], ['penemuan', 'temu'],
+
+  // say
+  ['mengatakan', 'kata'], ['perkataan', 'kata'], ['dikatakan', 'kata'],
+
+  // enter
+  ['memasuki', 'masuk'], ['pemasukan', 'masuk'],
+
+  // go out
+  ['mengeluarkan', 'keluar'], ['pengeluaran', 'keluar'],
+
+  // think
+  ['memikirkan', 'pikir'], ['pemikiran', 'pikir'], ['dipikirkan', 'pikir'],
+
+  // feel
+  ['merasakan', 'rasa'], ['perasaan', 'rasa'],
+
+  // remember
+  ['mengingat', 'ingat'], ['diingat', 'ingat'], ['mengingati', 'ingat'],
+
+  // change
+  ['mengubah', 'ubah'],  ['perubahan', 'ubah'],
+
+  // build
+  ['membangun', 'bangun'], ['pembangunan', 'bangun'],
+
+  // wait
+  ['menunggu', 'tunggu'], ['penantian', 'nanti'],
+
+  // ask
+  ['meminta', 'minta'], ['permintaan', 'minta'],
+
+  // receive
+  ['menerima', 'terima'], ['penerimaan', 'terima'],
+
+  // send
+  ['mengirimkan', 'kirim'], ['pengiriman', 'kirim'],
+
+  // create
+  ['menciptakan', 'cipta'], ['penciptaan', 'cipta'],
+
+  // follow
+  ['mengikuti', 'ikut'], ['pengikut', 'ikut'],
+
+  // produce
+  ['menghasilkan', 'hasil'], ['hasil', 'hasil'],
+
+  // need
+  ['memerlukan', 'perlu'], ['keperluan', 'perlu'],
+
+  // grow
+  ['bertumbuh', 'tumbuh'], ['pertumbuhan', 'tumbuh'],
+
+  // agree
+  ['menyetujui', 'setuju'], ['persetujuan', 'setuju'],
+
+  // try
+  ['mencoba', 'coba'], ['percobaan', 'coba'],
+
+  // hope
+  ['berharap', 'harap'], ['harapan', 'harap'],
+
+  // plan
+  ['merencanakan', 'rencana'], ['perencanaan', 'rencana'],
+
+  // understand
+  ['memahami', 'paham'], ['pemahaman', 'paham'],
+
+  // study
+  ['mempelajari', 'ajar'], ['pelajaran', 'ajar'],
+]);
+
+// ---- Suffix rules --------------------------------------------------------
+
+const INFLECTIONAL_SUFFIXES = ['lah', 'kah', 'tah', 'pun'];
+const POSSESSIVE_SUFFIXES   = ['nya', 'ku', 'mu'];
+const DERIVATIONAL_SUFFIXES = ['kan', 'an', 'i'];
+
+function removeSuffix(word, suffixes) {
+  for (const sfx of suffixes) {
+    if (word.endsWith(sfx) && word.length > sfx.length + 2) {
+      return word.slice(0, -sfx.length);
+    }
+  }
+  return word;
+}
+
+// ---- Morphophonemic prefix rules ----------------------------------------
+// Returns { base, extra } where extra may be a restored consonant prefix.
+
+const ME_RULES = [
+  // order matters: most specific first
+  { prefix: 'mengk',   strip: 4, restore: 'k'  }, // mengkritik → kritik
+  { prefix: 'mengg',   strip: 4, restore: 'g'  }, // menggambar → gambar
+  { prefix: 'mengh',   strip: 4, restore: 'h'  }, // menghapus  → hapus
+  { prefix: 'menggu',  strip: 5, restore: null  },
+  { prefix: 'menge',   strip: 5, restore: null  }, // mengecat   → cat
+  { prefix: 'meng',    strip: 4, restore: null,
+    vowelFix: true }, // meng + vowel → strip 4, else restore 'k'
+  { prefix: 'meny',    strip: 4, restore: 's'  }, // menyukai   → sukai
+  { prefix: 'memb',    strip: 3, restore: null  }, // membawa    → bawa
+  { prefix: 'memp',    strip: 3, restore: 'p'  }, // mempunyai  → (irregular)
+  { prefix: 'memf',    strip: 3, restore: 'f'  },
+  { prefix: 'memv',    strip: 3, restore: 'v'  },
+  { prefix: 'mem',     strip: 3, restore: 'p'  }, // memotong   → potong (luluh)
+  { prefix: 'menj',    strip: 3, restore: null  }, // menjual    → jual
+  { prefix: 'mend',    strip: 3, restore: null  }, // mendengar  → dengar
+  { prefix: 'menc',    strip: 3, restore: null  }, // mencari    → cari
+  { prefix: 'ment',    strip: 3, restore: 't'  }, // (luluh t)
+  { prefix: 'men',     strip: 3, restore: 't'  }, // menulis    → tulis (luluh)
+  { prefix: 'mel',     strip: 2, restore: null  }, // melakukan  → lakukan
+  { prefix: 'mer',     strip: 2, restore: null  }, // merasa     → rasa
+  { prefix: 'mew',     strip: 2, restore: null  },
+  { prefix: 'me',      strip: 2, restore: null  }, // general me-
+];
+
+const PE_RULES = [
+  { prefix: 'peng',    strip: 4, restore: null, vowelFix: true },
+  { prefix: 'peny',    strip: 4, restore: 's'  },
+  { prefix: 'pemb',    strip: 3, restore: null  },
+  { prefix: 'pemp',    strip: 3, restore: 'p'  },
+  { prefix: 'pem',     strip: 3, restore: 'p'  },
+  { prefix: 'penj',    strip: 3, restore: null  },
+  { prefix: 'pend',    strip: 3, restore: null  },
+  { prefix: 'penc',    strip: 3, restore: null  },
+  { prefix: 'pent',    strip: 3, restore: 't'  },
+  { prefix: 'pen',     strip: 3, restore: 't'  },
+  { prefix: 'per',     strip: 3, restore: null  },
+  { prefix: 'pel',     strip: 2, restore: null  },
+  { prefix: 'pe',      strip: 2, restore: null  },
+];
+
+function applyPrefixRules(word, rules) {
+  for (const rule of rules) {
+    if (!word.startsWith(rule.prefix)) continue;
+
+    let stem = word.slice(rule.strip);
+    if (rule.vowelFix) {
+      // meng/peng + vowel: just strip, no restore needed
+      // meng/peng + consonant: restore 'k'
+      if (stem.length < 2) continue;
+      if (!/^[aeiou]/.test(stem)) {
+        stem = 'k' + stem;
+      }
+    } else if (rule.restore) {
+      stem = rule.restore + stem;
+    }
+
+    if (stem.length >= 3) return stem;
+  }
+  return null;
+}
+
+// ---- Core Stem Function -------------------------------------------------
 
 /**
- * Stem a single Indonesian word back to its base form
- * @param {string} word - Input word (lowercase, alphabetic)
+ * Stem a single Indonesian word back to its base form.
+ * @param {string} word - Input word (will be lowercased internally)
+ * @param {Set<string>} [dictionary] - Optional dictionary for validation
  * @returns {string} Base word (stemmed)
  */
-export function stem(word) {
-  // Normalize
-  word = word.trim().toLowerCase();
-  
-  // Length check - Indonesian base words are at least 3 characters
+export function stem(word, dictionary = null) {
+  word = (word ?? '').trim().toLowerCase();
   if (word.length < 3) return word;
 
-  // Direct lookup for irregular/pre-computed stems
-  if (IRREGULAR_WORDS[word]) {
-    return IRREGULAR_WORDS[word];
+  // 1. Irregular words exact lookup (O(1))
+  const irregular = IRREGULAR_WORDS.get(word);
+  if (irregular) return irregular;
+
+  const original = word;
+
+  // 2. Kata ulang (reduplication) — handle BEFORE prefix stripping
+  // Format: "buku-buku", "berlari-lari" → base is the first segment
+  const redupMatch = word.match(/^(.+)-\1$/);
+  if (redupMatch) {
+    const base = redupMatch[1];
+    if (dictionary ? dictionary.has(base) : base.length >= 3) return base;
   }
 
-  let originalWord = word;
+  // 3. Remove inflectional suffixes (-lah, -kah, -tah, -pun)
+  let w = removeSuffix(word, INFLECTIONAL_SUFFIXES);
 
-  // Step 1: Remove Inflectional Suffixes (-lah, -kah, -tah, -pun)
-  word = removeInflectionalSuffix(word);
+  // 4. Remove possessive suffixes (-ku, -mu, -nya)
+  w = removeSuffix(w, POSSESSIVE_SUFFIXES);
 
-  // Step 2: Remove Possessive Suffixes (-ku, -mu, -nya)
-  word = removePossessiveSuffix(word);
+  // 5. Validate: if we already got a dictionary word, return it
+  if (dictionary && dictionary.has(w) && w !== word) return w;
 
-  // Step 3: Remove Derivational Suffixes (-kan, -an, -i)
-  word = removeDerivationalSuffix(word);
+  // 6. Remove derivational suffix
+  const wNoSuffix = removeSuffix(w, DERIVATIONAL_SUFFIXES);
+  if (dictionary && dictionary.has(wNoSuffix) && wNoSuffix.length >= 3) {
+    return wNoSuffix;
+  }
+  const wForPrefix = wNoSuffix.length >= 3 ? wNoSuffix : w;
 
-  // Step 4: Remove Derivational Prefixes (me-, ber-, di-, pe-, ter-, ke-, se-)
-  word = removeDerivationalPrefix(word);
+  // 7. Remove derivational prefix with morphophonemic restoration
+  let stemmed = null;
 
-  // If stemming ruined the word too much, fallback to original
-  if (word.length < 2) {
-    return originalWord;
+  if (wForPrefix.startsWith('me')) {
+    stemmed = applyPrefixRules(wForPrefix, ME_RULES);
+  } else if (wForPrefix.startsWith('pe')) {
+    stemmed = applyPrefixRules(wForPrefix, PE_RULES);
+  } else if (wForPrefix.startsWith('ber') && wForPrefix.length > 5) {
+    stemmed = wForPrefix.slice(3);
+  } else if (wForPrefix.startsWith('ter') && wForPrefix.length > 5) {
+    stemmed = wForPrefix.slice(3);
+  } else if (wForPrefix.startsWith('di') && wForPrefix.length > 4) {
+    stemmed = wForPrefix.slice(2);
+  } else if (wForPrefix.startsWith('ke') && wForPrefix.length > 4) {
+    stemmed = wForPrefix.slice(2);
+  } else if (wForPrefix.startsWith('se') && wForPrefix.length > 4) {
+    stemmed = wForPrefix.slice(2);
   }
 
-  return word;
-}
-
-function removeInflectionalSuffix(word) {
-  if (word.endsWith('lah') || word.endsWith('kah') || word.endsWith('tah') || word.endsWith('pun')) {
-    return word.slice(0, -3);
-  }
-  return word;
-}
-
-function removePossessiveSuffix(word) {
-  if (word.endsWith('nya')) {
-    return word.slice(0, -3);
-  }
-  if (word.endsWith('ku') || word.endsWith('mu')) {
-    return word.slice(0, -2);
-  }
-  return word;
-}
-
-function removeDerivationalSuffix(word) {
-  if (word.endsWith('kan')) {
-    return word.slice(0, -3);
-  }
-  if (word.endsWith('an')) {
-    return word.slice(0, -2);
-  }
-  if (word.endsWith('i') && !word.endsWith('si') && !word.endsWith('ti') && !word.endsWith('li')) {
-    return word.slice(0, -1);
-  }
-  return word;
-}
-
-function removeDerivationalPrefix(word) {
-  // 1. di-
-  if (word.startsWith('di') && word.length > 3) {
-    return word.slice(2);
-  }
-  
-  // 2. ke-
-  if (word.startsWith('ke') && word.length > 3 && !word.startsWith('kerja') && !word.startsWith('keras')) {
-    return word.slice(2);
-  }
-
-  // 3. se-
-  if (word.startsWith('se') && word.length > 3) {
-    return word.slice(2);
-  }
-
-  // 4. ter-
-  if (word.startsWith('ter') && word.length > 4) {
-    return word.slice(3);
-  }
-  if (word.startsWith('te') && word.charAt(2) === 'r') {
-    return word.slice(2);
-  }
-
-  // 5. ber-
-  if (word.startsWith('ber') && word.length > 4) {
-    return word.slice(3);
-  }
-  if (word.startsWith('be') && word.length > 3) {
-    // Handling e.g. "bekerja" -> "kerja"
-    if (word.startsWith('bekerja')) return 'kerja';
-    return word.slice(2);
-  }
-
-  // 6. me- (Complex morphophonemic rules)
-  if (word.startsWith('me')) {
-    return removeMePrefix(word);
-  }
-
-  // 7. pe- (similar to me-)
-  if (word.startsWith('pe')) {
-    return removePePrefix(word);
-  }
-
-  return word;
-}
-
-function removeMePrefix(word) {
-  // me-
-  if (word.startsWith('meng')) {
-    const stem = word.slice(4);
-    // meng[vowel] -> e.g. mengudara -> udara, mengikat -> ikat
-    // or meng[k] -> luluh e.g. mengkritik -> kritik, mengupas -> kupas (adds 'k')
-    if (/^[aeiou]/.test(stem)) {
-      return stem; // e.g. mengalir -> alir
+  if (stemmed) {
+    if (dictionary) {
+      // Validate stemmed result
+      if (dictionary.has(stemmed)) return stemmed;
+      // Also try stemmed without suffix
+      const stemmedNoSuffix = removeSuffix(stemmed, DERIVATIONAL_SUFFIXES);
+      if (dictionary.has(stemmedNoSuffix) && stemmedNoSuffix.length >= 3) return stemmedNoSuffix;
+    } else {
+      // No dictionary: trust the stemmed result if it's plausible length
+      if (stemmed.length >= 3) return stemmed;
     }
-    // Try restoring 'k'
-    return 'k' + stem; 
   }
 
-  if (word.startsWith('meny')) {
-    // meny[s] -> luluh e.g. menyiram -> siram, menyalin -> salin (restores 's')
-    return 's' + word.slice(4);
-  }
+  // 8. Fallback: return best candidate (with suffix removed if it's not empty)
+  if (wNoSuffix.length >= 3 && wNoSuffix !== original) return wNoSuffix;
 
-  if (word.startsWith('memb')) {
-    // mem+b -> e.g. membawa -> bawa
-    return word.slice(3); // mem + b... -> b...
-  }
-
-  if (word.startsWith('mem')) {
-    const stem = word.slice(3);
-    // mem+p -> luluh e.g. memotong -> potong (restores 'p')
-    return 'p' + stem;
-  }
-
-  if (word.startsWith('mend') || word.startsWith('menj') || word.startsWith('menc')) {
-    // men[d|j|c] -> e.g. mendengar -> dengar, mencari -> cari
-    return word.slice(3);
-  }
-
-  if (word.startsWith('men')) {
-    const stem = word.slice(3);
-    // men+t -> luluh e.g. menulis -> tulis (restores 't')
-    return 't' + stem;
-  }
-
-  // me- general prefix
-  return word.slice(2);
-}
-
-function removePePrefix(word) {
-  if (word.startsWith('peng')) {
-    const stem = word.slice(4);
-    if (/^[aeiou]/.test(stem)) {
-      return stem; // pengantar -> antar
-    }
-    return 'k' + stem; // pengupas -> kupas
-  }
-
-  if (word.startsWith('peny')) {
-    return 's' + word.slice(4); // penyiram -> siram
-  }
-
-  if (word.startsWith('pemb')) {
-    return word.slice(3); // pembawa -> bawa
-  }
-
-  if (word.startsWith('pem')) {
-    return 'p' + word.slice(3); // pemotong -> potong
-  }
-
-  if (word.startsWith('pend') || word.startsWith('penj') || word.startsWith('penc')) {
-    return word.slice(3);
-  }
-
-  if (word.startsWith('pen')) {
-    return 't' + word.slice(3); // penulis -> tulis
-  }
-
-  if (word.startsWith('per')) {
-    return word.slice(3); // perdamaian -> damai (after suffixes)
-  }
-
-  return word.slice(2);
+  return original;
 }

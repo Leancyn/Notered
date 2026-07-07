@@ -1,5 +1,5 @@
 const DB_NAME = "NoteredDB";
-const DB_VERSION = 3;
+const DB_VERSION = 4; // Must match dictionary.js version
 const STORE_NAME = "typo";
 
 const KEY_PREFIX = "typoMap";

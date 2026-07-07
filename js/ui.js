@@ -105,27 +105,24 @@ export class UI {
       const list = document.createElement("div");
       list.className = "suggestion-list";
       list.style.display = "flex";
-      list.style.flexDirection = "column";
+      list.style.flexWrap = "wrap";
       list.style.gap = "8px";
+      list.style.marginBottom = "8px";
 
       options.suggestions.forEach((word) => {
         const item = document.createElement("button");
-        item.className = "suggestion-item";
-        item.style.textAlign = "left";
-        item.style.width = "100%";
-        item.style.background = "none";
-        item.style.border = "none";
-        item.style.display = "flex";
-        item.style.justifyContent = "space-between";
-        item.style.alignItems = "center";
+        item.className = "suggestion-pill";
+        item.style.padding = "8px 16px";
+        item.style.background = "var(--bg-tertiary)";
+        item.style.border = "1px solid var(--accent-soft)";
+        item.style.borderRadius = "20px";
+        item.style.color = "var(--text-primary)";
+        item.style.fontWeight = "700";
+        item.style.fontSize = "0.95rem";
+        item.style.cursor = "pointer";
+        item.style.transition = "all 0.2s ease";
 
-        item.innerHTML = `
-          <div>
-            <span class="suggestion-label" style="display:block;">Saran Koreksi</span>
-            <strong style="font-size:1.05rem;color:var(--text-primary);">${word}</strong>
-          </div>
-          <svg style="width:20px;height:20px;fill:var(--accent-hover);" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-        `;
+        item.textContent = word;
 
         item.addEventListener("click", () => {
           if (options.onSelect) options.onSelect(word);

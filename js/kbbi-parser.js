@@ -21,6 +21,7 @@ export class KbbiParser {
       'n': 'Nomina',
       'v': 'Verba',
       'a': 'Adjektiva',
+      'adj': 'Adjektiva',
       'adv': 'Adverbia',
       'pron': 'Pronomina',
       'num': 'Numeralia',
@@ -80,14 +81,15 @@ export class KbbiParser {
       }
     }
     
-    // Manual HTML entity decoding for Node.js or fallback
+    // Manual HTML entity decoding for Node.js or fallback.
+    const e = '&';
     return str
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/&/g, '&')
-      .replace(/"/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, ' ');
+      .replace(new RegExp(e + 'lt;', 'g'), '<')
+      .replace(new RegExp(e + 'gt;', 'g'), '>')
+      .replace(new RegExp(e + 'quot;', 'g'), '"')
+      .replace(new RegExp(e + '#39;', 'g'), "'")
+      .replace(new RegExp(e + 'nbsp;', 'g'), ' ')
+      .replace(new RegExp(e + 'amp;', 'g'), '&');
   }
 
   /**
@@ -114,8 +116,9 @@ export class KbbiParser {
       // Replace multiple spaces/tabs with single space
       line = line.replace(/[ \t]+/g, ' ');
       
-      // Clean up spacing around punctuation
-      line = line.replace(/\s*([;:,.])\s*/g, '$1 ');
+      // Clean up spacing around punctuation. Dots are left alone because
+      // KBBI syllable markers can use them, e.g. "ti.dak".
+      line = line.replace(/\s*([;:,])\s*/g, '$1 ');
       
       // Remove space before closing punctuation
       line = line.replace(/\s+([;:,.])(?=\s|$)/g, '$1');
@@ -136,6 +139,39 @@ export class KbbiParser {
   _expandWordClass(abbr) {
     const trimmed = abbr.trim().toLowerCase();
     return this.wordClassMap[trimmed] || abbr;
+  }
+
+  _isWordClassToken(token) {
+    const normalized = (token || '').trim().toLowerCase();
+    return Boolean(this.wordClassMap[normalized]) || [
+      'nomina',
+      'verba',
+      'adjektiva',
+      'adverbia',
+      'pronomina',
+      'numeralia',
+      'partikel',
+      'kata kerja',
+      'kata benda',
+      'kata sifat',
+      'kata keterangan',
+    ].includes(normalized);
+  }
+
+  _normalizeWordClass(token) {
+    const cleaned = (token || '').trim();
+    if (!cleaned) return '';
+
+    const expanded = this._expandWordClass(cleaned);
+    if (expanded !== cleaned) return expanded;
+
+    const lower = cleaned.toLowerCase();
+    if (lower === 'kata kerja') return 'Verba';
+    if (lower === 'kata benda') return 'Nomina';
+    if (lower === 'kata sifat') return 'Adjektiva';
+    if (lower === 'kata keterangan') return 'Adverbia';
+
+    return cleaned.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
   }
 
   /**
@@ -162,12 +198,6 @@ export class KbbiParser {
       raw: text,
     };
 
-    // Extract the main word (before first number)
-    const wordMatch = text.match(/^([a-zA-Z·\s]+?)(?:\s+\d|$)/);
-    if (wordMatch) {
-      result.word = wordMatch[1].trim();
-    }
-
     // Find "Istilah:" section (case-insensitive)
     const istilahMatch = text.match(/Istilah:\s*([\s\S]*?)(?=Turunan:|$)/i);
     const istilahText = istilahMatch ? istilahMatch[1].trim() : '';
@@ -185,29 +215,7 @@ export class KbbiParser {
       mainText = mainText.replace(turunanMatch[0], '');
     }
 
-    // Parse numbered definitions from main text
-    // Pattern: number followed by space and word class abbreviation
-    const definitionPattern = /(\d+)\s+([a-zA-Z]+)\s+(.*?)(?=\s+\d+\s+[a-zA-Z]+\s+|$)/gs;
-    const definitions = [];
-    let match;
-
-    while ((match = definitionPattern.exec(mainText)) !== null) {
-      const num = match[1];
-      const wordClass = this._expandWordClass(match[2]);
-      let content = match[3].trim();
-
-      // Clean up "--" placeholders (examples in KBBI)
-      content = content.replace(/\s*--\s*/g, ' ').trim();
-      content = content.replace(/\s+/g, ' ').trim();
-
-      definitions.push({
-        number: parseInt(num),
-        wordClass: wordClass,
-        content: content,
-      });
-    }
-
-    result.definitions = definitions;
+    this._parseMainDefinitionBlock(mainText, result);
 
     // Parse istilah (terms) section
     if (istilahText) {
@@ -284,6 +292,83 @@ export class KbbiParser {
     }
 
     return result;
+  }
+
+  _parseMainDefinitionBlock(mainText, result) {
+    const text = mainText.trim();
+    if (!text) return;
+
+    const classAlternation = '(?:adv|adj|pron|num|kp|[nvap]|Nomina|Verba|Adjektiva|Adverbia|Pronomina|Numeralia|Partikel|Kata kerja|Kata benda|Kata sifat|Kata keterangan)';
+    const headPattern = new RegExp(`^([\\s\\S]*?)\\s+(${classAlternation})(?:\\s*\\([^)]*\\))?\\s+(?=(?:\\(?\\d+\\)|\\d+\\b)|[\\s\\S]+)`, 'i');
+    const headMatch = text.match(headPattern);
+
+    let body = text;
+    let defaultWordClass = '';
+
+    if (headMatch) {
+      result.word = headMatch[1].trim();
+      defaultWordClass = this._normalizeWordClass(headMatch[2]);
+      body = text.slice(headMatch[0].length).trim();
+    } else {
+      const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+      if (lines.length >= 2) {
+        result.word = lines[0];
+        const classLineMatch = lines[1].match(new RegExp(`^(${classAlternation})(?:\\s*\\([^)]*\\))?\\s*(.*)$`, 'i'));
+        if (classLineMatch) {
+          defaultWordClass = this._normalizeWordClass(classLineMatch[1]);
+          body = [classLineMatch[2], ...lines.slice(2)].join('\n').trim();
+        }
+      }
+    }
+
+    if (!result.word) {
+      const wordMatch = text.match(/^([\p{L}\p{M}.\u00B7' -]+?)(?:\s+\(?\d+\)?|\n|$)/u);
+      if (wordMatch) result.word = wordMatch[1].trim();
+    }
+
+    const definitions = [];
+    const numberedPattern = /(?:^|[\s;])\(?(\d+)\)?\s+([\s\S]*?)(?=(?:[\s;]\(?\d+\)?\s+)|$)/g;
+    let match;
+
+    while ((match = numberedPattern.exec(body)) !== null) {
+      let content = match[2].trim();
+      let wordClass = defaultWordClass;
+      const contentClassMatch = content.match(new RegExp(`^(${classAlternation})\\s+([\\s\\S]+)$`, 'i'));
+      if (contentClassMatch && this._isWordClassToken(contentClassMatch[1])) {
+        wordClass = this._normalizeWordClass(contentClassMatch[1]);
+        content = contentClassMatch[2].trim();
+      }
+
+      content = this._cleanDefinitionContent(content);
+      if (content) {
+        definitions.push({
+          number: parseInt(match[1], 10),
+          wordClass: wordClass || 'Arti',
+          content,
+        });
+      }
+    }
+
+    if (!definitions.length && body) {
+      const content = this._cleanDefinitionContent(body);
+      if (content) {
+        definitions.push({
+          number: 1,
+          wordClass: defaultWordClass || 'Arti',
+          content,
+        });
+      }
+    }
+
+    result.definitions = definitions;
+  }
+
+  _cleanDefinitionContent(content) {
+    return (content || '')
+      .replace(/\s*--\s*/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\s+([;:,.])/g, '$1')
+      .trim();
   }
 
   /**
