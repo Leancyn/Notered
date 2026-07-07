@@ -202,12 +202,17 @@ export class UI {
       }
     });
 
-    // 2. Hide all view panels and show the selected one with animation
+    // 2. Hide all view panels
     document.querySelectorAll(".view-panel").forEach((panel) => {
       panel.classList.remove("active");
-      if (panel.id === `view-${viewId}`) {
-        panel.classList.add("active");
-      }
     });
+
+    // 3. Show the selected panel with animation
+    const targetPanel = document.getElementById(`view-${viewId}`);
+    if (targetPanel) {
+      // Force reflow to restart animation
+      void targetPanel.offsetWidth;
+      targetPanel.classList.add("active");
+    }
   }
 }

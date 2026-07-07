@@ -3,6 +3,7 @@
  *
  * Allows users to search for reference images and convert them
  * to pencil sketches using Canvas color-dodge blending technique.
+ * Now uses Web Worker for off-main-thread processing.
  */
 
 import { Storage } from "./storage.js";
@@ -22,14 +23,46 @@ export class SketchSearch {
     this._apiKey = "";
     this._worker = null;
     this._cache = new Map();
+    this._sketchCache = new Map(); // Cache for sketch results: key = "url_blur_contrast"
 
     this._loadApiKey();
+    this._initWorker();
   }
 
   /** Load API key from storage */
   _loadApiKey() {
     const settings = Storage.loadSettings();
     this._apiKey = settings.apiKey || "aS5uJ3zTxy5gr5IcIlnaJ-zFUIdvcHirXc-jvlLApPM";
+  }
+
+  /** Initialize Web Worker for sketch processing */
+  _initWorker() {
+    try {
+      this._worker = new Worker("js/sketch-worker.js");
+      this._worker.onmessage = (event) => {
+        const msg = event.data;
+        if (msg.type === "result") {
+          this._resolveSketch(msg.imageData);
+        } else if (msg.type === "progress") {
+          if (this._onSketchProgress) {
+            this._onSketchProgress(msg.percent);
+          }
+        } else if (msg.type === "error") {
+          if (this._rejectSketch) {
+            this._rejectSketch(new Error(msg.message));
+          }
+        }
+      };
+      this._worker.onerror = (err) => {
+        console.error("Sketch worker error:", err);
+        if (this._rejectSketch) {
+          this._rejectSketch(new Error("Worker error"));
+        }
+      };
+    } catch (err) {
+      console.warn("Web Worker not available, falling back to main thread:", err);
+      this._worker = null;
+    }
   }
 
   /** Update API key */
@@ -206,12 +239,23 @@ export class SketchSearch {
 
   /**
    * Convert an image URL to pencil sketch
+   * Uses Web Worker when available, falls back to main thread.
+   *
    * @param {string} imageUrl - URL of the image
    * @param {number} blurAmount - Blur intensity (1-30, default 10)
+   * @param {number} contrastAmount - Contrast boost (0-100, default 0)
    * @param {function} onProgress - Progress callback (0-100)
    * @returns {Promise<HTMLCanvasElement>} Canvas with sketch result
    */
-  async convertToSketch(imageUrl, blurAmount = 10, onProgress = () => {}) {
+  async convertToSketch(imageUrl, blurAmount = 10, contrastAmount = 0, onProgress = () => {}) {
+    // Check sketch cache
+    const cacheKey = `${imageUrl}_${blurAmount}_${contrastAmount}`;
+    if (this._sketchCache.has(cacheKey)) {
+      const cached = this._sketchCache.get(cacheKey);
+      onProgress(100);
+      return cached;
+    }
+
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -234,7 +278,7 @@ export class SketchSearch {
           const canvas = document.createElement("canvas");
           canvas.width = w;
           canvas.height = h;
-          const ctx = canvas.getContext("2d");
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
           // Draw original
           ctx.drawImage(img, 0, 0, w, h);
@@ -242,59 +286,37 @@ export class SketchSearch {
 
           // Get image data
           const imageData = ctx.getImageData(0, 0, w, h);
-          const data = imageData.data;
 
-          // Step 1: Grayscale
-          const gray = new Uint8Array(w * h);
-          for (let i = 0; i < data.length; i += 4) {
-            const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-            gray[i / 4] = g;
+          if (this._worker) {
+            // Use Web Worker
+            this._onSketchProgress = onProgress;
+            this._resolveSketch = (resultImageData) => {
+              ctx.putImageData(resultImageData, 0, 0);
+
+              // Apply contrast boost if needed
+              if (contrastAmount > 0) {
+                this._applyContrast(canvas, contrastAmount);
+              }
+
+              onProgress(100);
+              this._sketchCache.set(cacheKey, canvas);
+              resolve(canvas);
+            };
+            this._rejectSketch = reject;
+
+            this._worker.postMessage({
+              type: "convert",
+              imageData: imageData,
+              blurAmount: blurAmount,
+            });
+          } else {
+            // Fallback: process on main thread
+            const result = this._processOnMainThread(imageData, blurAmount, contrastAmount, onProgress);
+            ctx.putImageData(result, 0, 0);
+            onProgress(100);
+            this._sketchCache.set(cacheKey, canvas);
+            resolve(canvas);
           }
-          onProgress(35);
-
-          // Step 2: Invert
-          const inverted = new Uint8Array(w * h);
-          for (let i = 0; i < gray.length; i++) {
-            inverted[i] = 255 - gray[i];
-          }
-          onProgress(45);
-
-          // Step 3: Gaussian-like blur (box blur, 2 passes for smoothness)
-          const blurred = this._boxBlur(inverted, w, h, blurAmount);
-          const blurred2 = this._boxBlur(blurred, w, h, blurAmount);
-          onProgress(70);
-
-          // Step 4: Color Dodge blend
-          for (let i = 0; i < gray.length; i++) {
-            const base = gray[i];
-            const blend = blurred2[i];
-
-            let result;
-            if (blend === 255) {
-              result = 255;
-            } else {
-              result = Math.min(255, Math.floor((base * 256) / (256 - blend)));
-            }
-
-            const pi = i * 4;
-            data[pi] = result;
-            data[pi + 1] = result;
-            data[pi + 2] = result;
-            data[pi + 3] = 255;
-          }
-          onProgress(90);
-
-          // Put result back on canvas
-          ctx.putImageData(imageData, 0, 0);
-
-          // Optional: increase contrast slightly for sharper lines
-          ctx.globalCompositeOperation = "multiply";
-          ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
-          ctx.fillRect(0, 0, w, h);
-          ctx.globalCompositeOperation = "source-over";
-
-          onProgress(100);
-          resolve(canvas);
         } catch (err) {
           reject(err);
         }
@@ -306,6 +328,86 @@ export class SketchSearch {
 
       img.src = imageUrl;
     });
+  }
+
+  /**
+   * Fallback processing on main thread when Worker is unavailable
+   */
+  _processOnMainThread(imageData, blurAmount, contrastAmount, onProgress) {
+    const w = imageData.width;
+    const h = imageData.height;
+    const data = imageData.data;
+    const totalPixels = w * h;
+
+    // Step 1: Grayscale
+    const gray = new Uint8Array(totalPixels);
+    for (let i = 0; i < data.length; i += 4) {
+      const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+      gray[i / 4] = g;
+    }
+    onProgress(35);
+
+    // Step 2: Invert
+    const inverted = new Uint8Array(totalPixels);
+    for (let i = 0; i < gray.length; i++) {
+      inverted[i] = 255 - gray[i];
+    }
+    onProgress(45);
+
+    // Step 3: Box blur (2 passes)
+    const blurred = this._boxBlur(inverted, w, h, blurAmount);
+    const blurred2 = this._boxBlur(blurred, w, h, blurAmount);
+    onProgress(70);
+
+    // Step 4: Color Dodge blend
+    for (let i = 0; i < gray.length; i++) {
+      const base = gray[i];
+      const blend = blurred2[i];
+
+      let result;
+      if (blend === 255) {
+        result = 255;
+      } else {
+        result = Math.min(255, Math.floor((base * 256) / (256 - blend)));
+      }
+
+      const pi = i * 4;
+      data[pi] = result;
+      data[pi + 1] = result;
+      data[pi + 2] = result;
+      data[pi + 3] = 255;
+    }
+    onProgress(90);
+
+    // Apply contrast boost
+    if (contrastAmount > 0) {
+      const factor = (259 * (contrastAmount + 255)) / (255 * (259 - contrastAmount));
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = Math.min(255, Math.max(0, Math.round(factor * (data[i] - 128) + 128)));
+        data[i + 1] = Math.min(255, Math.max(0, Math.round(factor * (data[i + 1] - 128) + 128)));
+        data[i + 2] = Math.min(255, Math.max(0, Math.round(factor * (data[i + 2] - 128) + 128)));
+      }
+    }
+
+    return imageData;
+  }
+
+  /**
+   * Apply contrast boost to a canvas
+   */
+  _applyContrast(canvas, contrastAmount) {
+    if (contrastAmount <= 0) return;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const factor = (259 * (contrastAmount + 255)) / (255 * (259 - contrastAmount));
+
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = Math.min(255, Math.max(0, Math.round(factor * (data[i] - 128) + 128)));
+      data[i + 1] = Math.min(255, Math.max(0, Math.round(factor * (data[i + 1] - 128) + 128)));
+      data[i + 2] = Math.min(255, Math.max(0, Math.round(factor * (data[i + 2] - 128) + 128)));
+    }
+    ctx.putImageData(imageData, 0, 0);
   }
 
   /**
@@ -376,8 +478,19 @@ export class SketchSearch {
     document.body.removeChild(link);
   }
 
-  /** Clear search cache */
+  /** Clear all caches */
   clearCache() {
     this._cache.clear();
+    this._sketchCache.clear();
+  }
+
+  /** Terminate the Web Worker */
+  destroy() {
+    if (this._worker) {
+      this._worker.terminate();
+      this._worker = null;
+    }
+    this._cache.clear();
+    this._sketchCache.clear();
   }
 }

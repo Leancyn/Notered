@@ -23,13 +23,21 @@
   display: none;
   opacity: 0;
   transform: translateY(10px);
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .view-panel.active {
   display: block;
-  opacity: 1;
-  transform: translateY(0);
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* Consolidated fadeIn for reuse across modules */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease forwards;
 }
 
 /* Mascot idle: Cat Tail Wagging */

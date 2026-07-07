@@ -5,6 +5,40 @@
  * IndexedDB storage to speed up consecutive app loads.
  */
 
+// Shared IndexedDB connection pool
+let _sharedDB = null;
+let _dbPromise = null;
+
+function _getDB() {
+  if (!_dbPromise) {
+    _dbPromise = new Promise((resolve, reject) => {
+      try {
+        const request = indexedDB.open("NoteredDB", 3);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("dictionary")) {
+            db.createObjectStore("dictionary");
+          }
+          if (!db.objectStoreNames.contains("kbbi_defs")) {
+            db.createObjectStore("kbbi_defs");
+          }
+          if (!db.objectStoreNames.contains("typo")) {
+            db.createObjectStore("typo");
+          }
+        };
+        request.onsuccess = (e) => {
+          _sharedDB = e.target.result;
+          resolve(_sharedDB);
+        };
+        request.onerror = (e) => reject(e.target.error);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+  return _dbPromise;
+}
+
 const DB_NAME = "NoteredDB";
 const DB_VERSION = 3;
 const STORE_NAME = "dictionary";
@@ -18,8 +52,6 @@ export class Dictionary {
 
     // Optional: GitHub-backed KBBI wordlist for better suggestion accuracy
     this._kbbiWordSources = [
-      // You can replace with RAW URLs if you want.
-      // Use RAW GitHub so fetch works reliably in browsers.
       "https://raw.githubusercontent.com/dyazincahya/KBBI-SQL-database/main/dictionary__JSON.json",
     ];
   }
@@ -157,27 +189,11 @@ export class Dictionary {
     this._wordsArray = Array.from(this._words).sort();
   }
 
-  /* --- IndexedDB Helpers --- */
-
-  _openDB() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
-        }
-      };
-
-      request.onsuccess = (e) => resolve(e.target.result);
-      request.onerror = (e) => reject(e.target.error);
-    });
-  }
+  /* --- IndexedDB Helpers (Shared Connection) --- */
 
   async _getFromCache() {
     try {
-      const db = await this._openDB();
+      const db = await _getDB();
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(STORE_NAME, "readonly");
         const store = transaction.objectStore(STORE_NAME);
@@ -248,7 +264,7 @@ export class Dictionary {
 
   async _saveToCache(words) {
     try {
-      const db = await this._openDB();
+      const db = await _getDB();
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(STORE_NAME, "readwrite");
         const store = transaction.objectStore(STORE_NAME);

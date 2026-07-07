@@ -8,11 +8,10 @@
 .editor-container {
   display: flex;
   flex-direction: column;
-  /* allow the page to scroll naturally (mobile) */
-  min-height: 100%;
   padding: 16px;
   position: relative;
   overflow: visible;
+  min-height: 100%;
 }
 
 @media (min-width: 768px) {
@@ -24,12 +23,15 @@
 .editor-area-wrapper {
   flex: 1;
   position: relative;
-  display: flex;
-  flex-direction: column;
+  min-height: 0;
 }
 
 .editor-area {
-  flex: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   min-height: 250px;
   border-radius: 16px;
@@ -159,13 +161,26 @@
 .editor-stats-bar {
   display: flex;
   justify-content: space-around;
+  align-items: center;
   background: var(--bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 8px;
-  margin-top: 12px;
+  padding: 10px 12px;
   font-size: 0.8rem;
   font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 12px;
+  -webkit-border-radius: 12px;
+  -moz-border-radius: 12px;
+  -ms-border-radius: 12px;
+  -o-border-radius: 12px;
+}
+
+@media (min-width: 768px) {
+  .editor-stats-bar {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+  }
 }

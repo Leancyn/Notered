@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Notered untuk Miraa</title>
+  <title>Notered For Mira</title>
 
   <!-- SEO Meta Tags -->
   <meta name="description"
@@ -19,13 +19,21 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Notered">
 
-  <!-- Core and Features CSS -->
+  <!-- Preconnect to critical origins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.unsplash.com">
+
+  <!-- Core and Features CSS (critical) -->
   <link rel="stylesheet" href="css/index.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/editor.css">
   <link rel="stylesheet" href="css/sketch.css">
   <link rel="stylesheet" href="css/animations.css">
   <link rel="stylesheet" href="css/mood.css">
+
+  <!-- Preload main script with defer -->
+  <script type="module" src="js/app.js" defer></script>
 </head>
 
 <body>
@@ -46,10 +54,8 @@
       <circle cx="50" cy="35" r="3.5" fill="var(--text-primary)" />
       <circle cx="60" cy="40" r="3.5" fill="var(--text-primary)" />
     </svg>
-    <div style="margin-top: 16px; font-weight: 800; color: var(--text-primary); font-size: 1.15rem;">Memuat Database
-      KBBI...</div>
-    <div style="margin-top: 4px; font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">meow~ mohon
-      tunggu sebentar</div>
+    <div class="loading-text-main">Sedang menyiapkan...</div>
+    <div class="loading-text-sub">meow~ sebentar lagi ya~</div>
   </div>
 
   <!-- iOS-Style Header -->
@@ -60,7 +66,7 @@
         <path
           d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14H7v-2h6v2zm4-4H7v-2h10v2zm0-4H7V6h10v2z" />
       </svg>
-      <span>Notered</span>
+      <span>Notered <span class="header-subtitle">For Mira</span></span>
     </div>
     <div class="header-actions">
       <!-- Document actions -->
@@ -92,8 +98,7 @@
       <div class="editor-container">
         <div class="editor-area-wrapper">
           <div id="editor-area" class="editor-area" contenteditable="true"
-            placeholder="Ketik tulisanmu di sini, siap dibantu kucingmu… meow~">
-          </div>
+            placeholder="Hai, sayang! Ketik tulisanmu di sini, aku siap membantumu~ meow!"></div>
 
           <!-- Interactive Cat Mascot positioned in editor corner -->
           <div class="cat-mascot-wrapper" id="cat-mascot">
@@ -309,15 +314,21 @@
         <!-- Rendered dynamically -->
       </div>
 
-      <!-- Blur detail slider controls -->
-      <div class="sketch-modal-footer">
+      <!-- Blur & Contrast slider controls -->
+      <div class="sketch-modal-footer" id="sketch-modal-footer">
         <div class="slider-group">
           <div class="slider-label-row">
             <span>Tingkat Detail Sketsa</span>
             <span id="slider-blur-val">10</span>
           </div>
-          <input type="range" id="sketch-blur-slider" class="sketch-slider" min="1" max="25" value="10"
-            oninput="document.getElementById('slider-blur-val').textContent=this.value">
+          <input type="range" id="sketch-blur-slider" class="sketch-slider" min="2" max="30" value="10">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label-row">
+            <span>Kontras Sketsa</span>
+            <span id="slider-contrast-val">10</span>
+          </div>
+          <input type="range" id="sketch-contrast-slider" class="sketch-slider" min="0" max="50" value="10">
         </div>
         <p style="font-size:0.75rem; color:var(--text-secondary); line-height:1.4; text-align:center;">
           Gambar disediakan oleh <a id="sketch-author-link" href="#" target="_blank"
@@ -333,8 +344,6 @@
     </div>
   </div>
 
-  <!-- Load main logic as ES module -->
-  <script type="module" src="js/app.js"></script>
 </body>
 
 </html>

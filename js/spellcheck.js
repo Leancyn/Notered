@@ -10,6 +10,7 @@ import { stem } from "./stemmer.js";
 import { Autocorrect } from "./autocorrect.js";
 import { loadTypoMapUnified } from "./typo-loader.js";
 import { checkCommonTypos, getCommonTypoMap } from "./typo-patterns.js";
+import { levenshteinDistance as sharedLevenshtein, damerauLevenshteinDistance } from "./edit-distance.js";
 
 // Common abbreviations, URLs, and punctuation to skip or whitelist
 
@@ -197,71 +198,25 @@ export class SpellChecker {
   }
 
   /**
-   * Levenshtein distance dynamic programming matrix implementation
+   * Levenshtein distance wrapper (delegates to shared implementation)
+   * @param {string} a - String 1
+   * @param {string} b - String 2
+   * @returns {number} Edit distance
+   */
+  levenshteinDistance(a, b) {
+    // Delegate to shared implementation in edit-distance.js
+    return sharedLevenshtein(a, b);
+  }
+
+  /**
+   * Damerau-Levenshtein distance wrapper (delegates to shared implementation)
+   * Backward-compatible helper for Editor auto-correct.
    * @param {string} a - String 1
    * @param {string} b - String 2
    * @returns {number} Edit distance
    */
   damerauDistance(a, b) {
-    // Backward-compatible helper for Editor auto-correct
-    // (Editor uses this method.)
-    // Lazy-require avoided in ESM environment.
-    const aStr = (a ?? "").toLowerCase();
-    const bStr = (b ?? "").toLowerCase();
-
-    // Optimal String Alignment variant: adjacent transpositions
-    if (aStr === bStr) return 0;
-
-    const n = aStr.length;
-    const m = bStr.length;
-    if (n === 0) return m;
-    if (m === 0) return n;
-
-    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-    for (let i = 0; i <= n; i++) dp[i][0] = i;
-    for (let j = 0; j <= m; j++) dp[0][j] = j;
-
-    for (let i = 1; i <= n; i++) {
-      for (let j = 1; j <= m; j++) {
-        const cost = aStr.charCodeAt(i - 1) === bStr.charCodeAt(j - 1) ? 0 : 1;
-
-        const del = dp[i - 1][j] + 1;
-        const ins = dp[i][j - 1] + 1;
-        const sub = dp[i - 1][j - 1] + cost;
-        let val = Math.min(del, ins, sub);
-
-        if (i > 1 && j > 1 && aStr.charCodeAt(i - 1) === bStr.charCodeAt(j - 2) && aStr.charCodeAt(i - 2) === bStr.charCodeAt(j - 1)) {
-          val = Math.min(val, dp[i - 2][j - 2] + 1);
-        }
-
-        dp[i][j] = val;
-      }
-    }
-
-    return dp[n][m];
-  }
-
-  levenshteinDistance(a, b) {
-    const dp = [];
-
-    for (let i = 0; i <= a.length; i++) {
-      dp[i] = [i];
-    }
-    for (let j = 0; j <= b.length; j++) {
-      dp[0][j] = j;
-    }
-
-    for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
-        const cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
-        dp[i][j] = Math.min(
-          dp[i - 1][j] + 1, // Deletion
-          dp[i][j - 1] + 1, // Insertion
-          dp[i - 1][j - 1] + cost, // Substitution
-        );
-      }
-    }
-
-    return dp[a.length][b.length];
+    // Delegate to shared implementation
+    return damerauLevenshteinDistance(a, b);
   }
 }

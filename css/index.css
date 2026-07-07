@@ -117,8 +117,8 @@ a, button, input, select, textarea, [role="button"], [contenteditable] {
 /* Utility Classes */
 .glass {
   background: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
@@ -144,4 +144,33 @@ a, button, input, select, textarea, [role="button"], [contenteditable] {
 /* SafeArea Helper */
 .safe-padding-bottom {
   padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 16px));
+}
+
+/* Loading Screen Text */
+.loading-text-main {
+  margin-top: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  text-align: center;
+  padding: 0 20px;
+}
+
+.loading-text-sub {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  padding: 0 20px;
+}
+
+@media (max-width: 360px) {
+  .loading-text-main {
+    font-size: 1rem;
+  }
+  
+  .loading-text-sub {
+    font-size: 0.8rem;
+  }
 }

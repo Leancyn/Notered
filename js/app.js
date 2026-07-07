@@ -36,6 +36,9 @@ class App {
     // 0. Initialize Mood Tracker (for journal prompts, affirmations, streak)
     this.moodTracker = new MoodTracker();
 
+    // Cache settings to avoid repeated localStorage reads
+    this._cachedSettings = Storage.loadSettings();
+
     // 1. Initialize Dictionary & Spellcheck
     this.dictionary = new Dictionary();
     await this.dictionary.load();
@@ -68,8 +71,8 @@ class App {
     // 6. Initialize Mood tab content
     this._renderMoodPanel();
 
-    // 7. Apply saved theme
-    this._applyTheme(Storage.loadSettings().theme || 'light');
+    // 7. Apply saved theme (use cached settings)
+    this._applyTheme(this._cachedSettings.theme || "light");
 
     // 8. Hide loading screen
     if (this._appLoadingScreen) {
@@ -184,19 +187,6 @@ class App {
       });
     }
 
-    // Sketch Modal controls
-    const btnCloseSketch = document.getElementById("btn-close-sketch");
-    if (btnCloseSketch) {
-      btnCloseSketch.addEventListener("click", () => this._hideSketchModal());
-    }
-
-    const sketchOverlay = document.getElementById("sketch-modal-overlay");
-    if (sketchOverlay) {
-      sketchOverlay.addEventListener("click", (e) => {
-        if (e.target === sketchOverlay) this._hideSketchModal();
-      });
-    }
-
     // Theme picker
     document.querySelectorAll(".theme-option").forEach((opt) => {
       opt.addEventListener("click", () => {
@@ -245,32 +235,44 @@ class App {
 
       <div class="mood-section-title">Apa kabar hatimu hari ini?</div>
       <div class="mood-grid" id="mood-grid">
-        ${moods.map((m, idx) => `
-          <button class="mood-btn ${todayMood && todayMood.label === m.label ? 'active' : ''}" data-mood-index="${idx}" style="${todayMood && todayMood.label === m.label ? `border-color:${m.color};background:${m.bg};` : ''}">
+        ${moods
+          .map(
+            (m, idx) => `
+          <button class="mood-btn ${todayMood && todayMood.label === m.label ? "active" : ""}" data-mood-index="${idx}" style="${todayMood && todayMood.label === m.label ? `border-color:${m.color};background:${m.bg};` : ""}">
             <span class="mood-btn-icon">${m.svg}</span>
             <span class="mood-btn-label">${m.label}</span>
           </button>
-        `).join('')}
+        `,
+          )
+          .join("")}
       </div>
 
-      ${streak.count > 0 ? `
+      ${
+        streak.count > 0
+          ? `
       <div style="display:flex;justify-content:center;">
         <div class="streak-badge">
           <svg class="streak-badge-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 23c-1.5 0-3.1-.6-4.2-1.8-2.7-2.6-6.8-5.9-6.8-10.7 0-4 3.3-7.5 7-7.5 1.3 0 2.5.4 3.5 1.1V1.5c0-.6.4-1 1-1s1 .4 1 1V4c1-.7 2.2-1.1 3.5-1.1 3.7 0 7 3.4 7 7.5 0 4.7-4.1 8.1-6.8 10.7C15.1 22.4 13.5 23 12 23z"/></svg>
           <span>${streak.count} hari menulis berturut-turut!</span>
         </div>
-      </div>` : ''}
+      </div>`
+          : ""
+      }
 
       <div class="mood-section-title">Riwayat Mood 7 Hari</div>
       <div class="mood-history">
-        ${history.map(h => `
+        ${history
+          .map(
+            (h) => `
           <div class="mood-history-item">
-            <div class="mood-history-dot ${h.mood ? 'filled' : ''}" style="${h.mood ? `background:${h.mood.bg};border-color:${h.mood.color};color:${h.mood.color};` : ''}">
+            <div class="mood-history-dot ${h.mood ? "filled" : ""}" style="${h.mood ? `background:${h.mood.bg};border-color:${h.mood.color};color:${h.mood.color};` : ""}">
               ${h.mood ? h.mood.svg : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="5" x2="19" y2="19"/></svg>'}
             </div>
             <div class="mood-history-label">${h.dateLabel}</div>
           </div>
-        `).join('')}
+        `,
+          )
+          .join("")}
       </div>
 
       <div class="mood-section-title">Prompt Jurnal Hari Ini</div>
@@ -290,7 +292,7 @@ class App {
         </div>
         <div class="mood-stat-card">
           <div class="mood-stat-icon">${stats.mostCommonMood ? stats.mostCommonMood.svg : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>'}</div>
-          <div class="mood-stat-number" style="font-size:0.8rem;">${stats.mostCommonMood ? stats.mostCommonMood.label : '—'}</div>
+          <div class="mood-stat-number" style="font-size:0.8rem;">${stats.mostCommonMood ? stats.mostCommonMood.label : "—"}</div>
           <div class="mood-stat-label">Mood Terbanyak</div>
         </div>
         <div class="mood-stat-card">
@@ -300,12 +302,17 @@ class App {
       </div>
     `;
 
-    // Bind mood button clicks
+    // Bind mood button clicks - optimize to avoid full re-render
     container.querySelectorAll(".mood-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const idx = parseInt(btn.dataset.moodIndex);
         this.moodTracker.setMood(idx);
-        this._renderMoodPanel(); // Re-render to update active state
+
+        // Optimize: just update active states instead of full re-render
+        container.querySelectorAll(".mood-btn").forEach((b, i) => {
+          b.classList.toggle("active", i === idx);
+        });
+
         this.ui.showToast(`Mood hari ini: ${MoodTracker.getMoodOptions()[idx].label}`, "success");
       });
     });
@@ -322,7 +329,7 @@ class App {
         }
         this.moodTracker.markWrittenToday();
         this.ui.switchTab("tulis");
-        this.ui.showToast("Prompt siap ditulis! Semoga menginspirasi ✨", "info");
+        this.ui.showToast("Prompt siap ditulis! Semoga menginspirasi", "info");
       });
     }
   }
@@ -333,96 +340,96 @@ class App {
     const root = document.documentElement;
 
     // Reset to defaults first
-    root.style.setProperty('--bg-primary', '#FFFDF5');
-    root.style.setProperty('--bg-secondary', '#FFF8E7');
-    root.style.setProperty('--bg-tertiary', '#FFF3D6');
-    root.style.setProperty('--bg-glass', 'rgba(255, 248, 220, 0.65)');
-    root.style.setProperty('--accent', '#F5C542');
-    root.style.setProperty('--accent-hover', '#E8A838');
-    root.style.setProperty('--accent-soft', '#FDEAB0');
-    root.style.setProperty('--accent-peach', '#F5D0A9');
-    root.style.setProperty('--text-primary', '#3D2E1C');
-    root.style.setProperty('--text-secondary', '#8A7A66');
-    root.style.setProperty('--cat-pink', '#FFB5C2');
-    root.style.setProperty('--cat-cream', '#FFF0E0');
-    root.style.setProperty('--border', 'rgba(139, 109, 56, 0.12)');
-    root.style.setProperty('--shadow', 'rgba(139, 109, 56, 0.08)');
-    root.style.setProperty('--shadow-lg', 'rgba(139, 109, 56, 0.15)');
+    root.style.setProperty("--bg-primary", "#FFFDF5");
+    root.style.setProperty("--bg-secondary", "#FFF8E7");
+    root.style.setProperty("--bg-tertiary", "#FFF3D6");
+    root.style.setProperty("--bg-glass", "rgba(255, 248, 220, 0.65)");
+    root.style.setProperty("--accent", "#F5C542");
+    root.style.setProperty("--accent-hover", "#E8A838");
+    root.style.setProperty("--accent-soft", "#FDEAB0");
+    root.style.setProperty("--accent-peach", "#F5D0A9");
+    root.style.setProperty("--text-primary", "#3D2E1C");
+    root.style.setProperty("--text-secondary", "#8A7A66");
+    root.style.setProperty("--cat-pink", "#FFB5C2");
+    root.style.setProperty("--cat-cream", "#FFF0E0");
+    root.style.setProperty("--border", "rgba(139, 109, 56, 0.12)");
+    root.style.setProperty("--shadow", "rgba(139, 109, 56, 0.08)");
+    root.style.setProperty("--shadow-lg", "rgba(139, 109, 56, 0.15)");
 
     // Update theme-color meta
     const metaTheme = document.querySelector('meta[name="theme-color"]');
 
-    if (theme === 'pink') {
-      root.style.setProperty('--bg-primary', '#FFF0F5');
-      root.style.setProperty('--bg-secondary', '#FFE8EE');
-      root.style.setProperty('--bg-tertiary', '#FFDCE6');
-      root.style.setProperty('--bg-glass', 'rgba(255, 232, 238, 0.65)');
-      root.style.setProperty('--accent', '#FFB5C2');
-      root.style.setProperty('--accent-hover', '#F090A0');
-      root.style.setProperty('--accent-soft', '#FFD0D8');
-      root.style.setProperty('--accent-peach', '#FFC0C8');
-      root.style.setProperty('--text-primary', '#5C3038');
-      root.style.setProperty('--text-secondary', '#9A7078');
-      root.style.setProperty('--cat-pink', '#FFB5C2');
-      root.style.setProperty('--cat-cream', '#FFF0E0');
-      root.style.setProperty('--border', 'rgba(200, 100, 120, 0.12)');
-      root.style.setProperty('--shadow', 'rgba(200, 100, 120, 0.08)');
-      root.style.setProperty('--shadow-lg', 'rgba(200, 100, 120, 0.15)');
-      if (metaTheme) metaTheme.setAttribute('content', '#FFF0F5');
-    } else if (theme === 'lavender') {
-      root.style.setProperty('--bg-primary', '#F5F0FF');
-      root.style.setProperty('--bg-secondary', '#EDE5FF');
-      root.style.setProperty('--bg-tertiary', '#E5D8FF');
-      root.style.setProperty('--bg-glass', 'rgba(237, 229, 255, 0.65)');
-      root.style.setProperty('--accent', '#C9B5FF');
-      root.style.setProperty('--accent-hover', '#B095F0');
-      root.style.setProperty('--accent-soft', '#DCCEFF');
-      root.style.setProperty('--accent-peach', '#D0C0F5');
-      root.style.setProperty('--text-primary', '#3A285C');
-      root.style.setProperty('--text-secondary', '#7868A0');
-      root.style.setProperty('--cat-pink', '#D0B0F0');
-      root.style.setProperty('--cat-cream', '#F5EEFF');
-      root.style.setProperty('--border', 'rgba(100, 60, 160, 0.10)');
-      root.style.setProperty('--shadow', 'rgba(100, 60, 160, 0.08)');
-      root.style.setProperty('--shadow-lg', 'rgba(100, 60, 160, 0.15)');
-      if (metaTheme) metaTheme.setAttribute('content', '#F5F0FF');
-    } else if (theme === 'rosegold') {
-      root.style.setProperty('--bg-primary', '#FFF5F0');
-      root.style.setProperty('--bg-secondary', '#FFEDE5');
-      root.style.setProperty('--bg-tertiary', '#FFE0D0');
-      root.style.setProperty('--bg-glass', 'rgba(255, 237, 229, 0.65)');
-      root.style.setProperty('--accent', '#F0A8A8');
-      root.style.setProperty('--accent-hover', '#E08080');
-      root.style.setProperty('--accent-soft', '#F8D0C8');
-      root.style.setProperty('--accent-peach', '#F5C0B8');
-      root.style.setProperty('--text-primary', '#5C3030');
-      root.style.setProperty('--text-secondary', '#907070');
-      root.style.setProperty('--cat-pink', '#F0C0B0');
-      root.style.setProperty('--cat-cream', '#FFF0E8');
-      root.style.setProperty('--border', 'rgba(180, 100, 80, 0.12)');
-      root.style.setProperty('--shadow', 'rgba(180, 100, 80, 0.08)');
-      root.style.setProperty('--shadow-lg', 'rgba(180, 100, 80, 0.15)');
-      if (metaTheme) metaTheme.setAttribute('content', '#FFF5F0');
-    } else if (theme === 'mint') {
-      root.style.setProperty('--bg-primary', '#F0FFF5');
-      root.style.setProperty('--bg-secondary', '#E0F8E8');
-      root.style.setProperty('--bg-tertiary', '#D0F0D8');
-      root.style.setProperty('--bg-glass', 'rgba(224, 248, 232, 0.65)');
-      root.style.setProperty('--accent', '#A8F0C0');
-      root.style.setProperty('--accent-hover', '#80D8A0');
-      root.style.setProperty('--accent-soft', '#C8F8D8');
-      root.style.setProperty('--accent-peach', '#B8F0C8');
-      root.style.setProperty('--text-primary', '#2A4A30');
-      root.style.setProperty('--text-secondary', '#688070');
-      root.style.setProperty('--cat-pink', '#B0D8C0');
-      root.style.setProperty('--cat-cream', '#E8F8EE');
-      root.style.setProperty('--border', 'rgba(60, 140, 80, 0.10)');
-      root.style.setProperty('--shadow', 'rgba(60, 140, 80, 0.08)');
-      root.style.setProperty('--shadow-lg', 'rgba(60, 140, 80, 0.15)');
-      if (metaTheme) metaTheme.setAttribute('content', '#F0FFF5');
+    if (theme === "pink") {
+      root.style.setProperty("--bg-primary", "#FFF0F5");
+      root.style.setProperty("--bg-secondary", "#FFE8EE");
+      root.style.setProperty("--bg-tertiary", "#FFDCE6");
+      root.style.setProperty("--bg-glass", "rgba(255, 232, 238, 0.65)");
+      root.style.setProperty("--accent", "#FFB5C2");
+      root.style.setProperty("--accent-hover", "#F090A0");
+      root.style.setProperty("--accent-soft", "#FFD0D8");
+      root.style.setProperty("--accent-peach", "#FFC0C8");
+      root.style.setProperty("--text-primary", "#5C3038");
+      root.style.setProperty("--text-secondary", "#9A7078");
+      root.style.setProperty("--cat-pink", "#FFB5C2");
+      root.style.setProperty("--cat-cream", "#FFF0E0");
+      root.style.setProperty("--border", "rgba(200, 100, 120, 0.12)");
+      root.style.setProperty("--shadow", "rgba(200, 100, 120, 0.08)");
+      root.style.setProperty("--shadow-lg", "rgba(200, 100, 120, 0.15)");
+      if (metaTheme) metaTheme.setAttribute("content", "#FFF0F5");
+    } else if (theme === "lavender") {
+      root.style.setProperty("--bg-primary", "#F5F0FF");
+      root.style.setProperty("--bg-secondary", "#EDE5FF");
+      root.style.setProperty("--bg-tertiary", "#E5D8FF");
+      root.style.setProperty("--bg-glass", "rgba(237, 229, 255, 0.65)");
+      root.style.setProperty("--accent", "#C9B5FF");
+      root.style.setProperty("--accent-hover", "#B095F0");
+      root.style.setProperty("--accent-soft", "#DCCEFF");
+      root.style.setProperty("--accent-peach", "#D0C0F5");
+      root.style.setProperty("--text-primary", "#3A285C");
+      root.style.setProperty("--text-secondary", "#7868A0");
+      root.style.setProperty("--cat-pink", "#D0B0F0");
+      root.style.setProperty("--cat-cream", "#F5EEFF");
+      root.style.setProperty("--border", "rgba(100, 60, 160, 0.10)");
+      root.style.setProperty("--shadow", "rgba(100, 60, 160, 0.08)");
+      root.style.setProperty("--shadow-lg", "rgba(100, 60, 160, 0.15)");
+      if (metaTheme) metaTheme.setAttribute("content", "#F5F0FF");
+    } else if (theme === "rosegold") {
+      root.style.setProperty("--bg-primary", "#FFF5F0");
+      root.style.setProperty("--bg-secondary", "#FFEDE5");
+      root.style.setProperty("--bg-tertiary", "#FFE0D0");
+      root.style.setProperty("--bg-glass", "rgba(255, 237, 229, 0.65)");
+      root.style.setProperty("--accent", "#F0A8A8");
+      root.style.setProperty("--accent-hover", "#E08080");
+      root.style.setProperty("--accent-soft", "#F8D0C8");
+      root.style.setProperty("--accent-peach", "#F5C0B8");
+      root.style.setProperty("--text-primary", "#5C3030");
+      root.style.setProperty("--text-secondary", "#907070");
+      root.style.setProperty("--cat-pink", "#F0C0B0");
+      root.style.setProperty("--cat-cream", "#FFF0E8");
+      root.style.setProperty("--border", "rgba(180, 100, 80, 0.12)");
+      root.style.setProperty("--shadow", "rgba(180, 100, 80, 0.08)");
+      root.style.setProperty("--shadow-lg", "rgba(180, 100, 80, 0.15)");
+      if (metaTheme) metaTheme.setAttribute("content", "#FFF5F0");
+    } else if (theme === "mint") {
+      root.style.setProperty("--bg-primary", "#F0FFF5");
+      root.style.setProperty("--bg-secondary", "#E0F8E8");
+      root.style.setProperty("--bg-tertiary", "#D0F0D8");
+      root.style.setProperty("--bg-glass", "rgba(224, 248, 232, 0.65)");
+      root.style.setProperty("--accent", "#A8F0C0");
+      root.style.setProperty("--accent-hover", "#80D8A0");
+      root.style.setProperty("--accent-soft", "#C8F8D8");
+      root.style.setProperty("--accent-peach", "#B8F0C8");
+      root.style.setProperty("--text-primary", "#2A4A30");
+      root.style.setProperty("--text-secondary", "#688070");
+      root.style.setProperty("--cat-pink", "#B0D8C0");
+      root.style.setProperty("--cat-cream", "#E8F8EE");
+      root.style.setProperty("--border", "rgba(60, 140, 80, 0.10)");
+      root.style.setProperty("--shadow", "rgba(60, 140, 80, 0.08)");
+      root.style.setProperty("--shadow-lg", "rgba(60, 140, 80, 0.15)");
+      if (metaTheme) metaTheme.setAttribute("content", "#F0FFF5");
     } else {
       // Light (default)
-      if (metaTheme) metaTheme.setAttribute('content', '#FFFDF5');
+      if (metaTheme) metaTheme.setAttribute("content", "#FFFDF5");
     }
 
     // Update active theme option in settings
@@ -546,12 +553,12 @@ class App {
     }
 
     this.editor.setContent(
-      "Halo! Selamat datang di Notered. meow~\n\n" +
-        "Ini adalah asisten menulis Bahasa Indonesia per kata. " +
-        "Ketik tulisanmu di sini. Kata yang salah eja akan di-highlight garis bawah gelombang merah " +
-        "(misal: mnulis atau memotongg), sedangkan kata tidak baku akan bergaris bawah kuning " +
+      "Hai, sayang! Selamat datang di Notered~ meow!\n\n" +
+        "Aku adalah asisten menulis Bahasa Indonesia per kata yang super ramah. " +
+        "Ketik tulisanmu di sini, ya! Kata yang salah eja akan kusorot dengan garis bawah gelombang merah " +
+        "(misal: mnulis atau memotongg), sedangkan kata tidak baku akan kutunggulkan dengan garis bawah kuning " +
         "(misal: nggak atau udah).\n\n" +
-        "Klik kata yang ditandai untuk melihat saran koreksi ejaan dari KBBI!",
+        "Klik kata yang ditandai untuk melihat saran koreksi ejaan~",
     );
   }
 
@@ -636,19 +643,19 @@ class App {
       });
 
       // Check if this draft has a mood associated (from the date it was saved)
-      let moodSvg = '';
+      let moodSvg = "";
       try {
         const dateKey = new Date(draft.updatedAt);
-        const key = dateKey.getFullYear() + '-' + String(dateKey.getMonth()+1).padStart(2,'0') + '-' + String(dateKey.getDate()).padStart(2,'0');
-        const moodLog = JSON.parse(localStorage.getItem('notered_mood_log') || '{}');
+        const key = dateKey.getFullYear() + "-" + String(dateKey.getMonth() + 1).padStart(2, "0") + "-" + String(dateKey.getDate()).padStart(2, "0");
+        const moodLog = JSON.parse(localStorage.getItem("notered_mood_log") || "{}");
         const moodIdx = moodLog[key];
         if (moodIdx !== undefined) {
           const moods = MoodTracker.getMoodOptions();
           if (moods[moodIdx]) {
-            moodSvg = '<span style="display:inline-block;width:16px;height:16px;vertical-align:middle;margin-right:4px;">' + moods[moodIdx].svg + '</span> ';
+            moodSvg = '<span style="display:inline-block;width:16px;height:16px;vertical-align:middle;margin-right:4px;">' + moods[moodIdx].svg + "</span> ";
           }
         }
-      } catch(e) {}
+      } catch (e) {}
 
       card.innerHTML = `
         <div class="draft-info">
@@ -684,6 +691,147 @@ class App {
 
       container.appendChild(card);
     });
+  }
+
+  /* --- Sketch Reference COORDINATORS (Optimized) --- */
+
+  _sketchModalState = {
+    photo: null,
+    canvas: null,
+    originalImg: null,
+    currentBlur: 10,
+    currentContrast: 10,
+    reprocessTimer: null,
+  };
+
+  _initSketchModal() {
+    // One-time event delegation setup – no more cloneNode!
+    const overlay = document.getElementById("sketch-modal-overlay");
+    if (!overlay || overlay.dataset.sketchBound) return;
+    overlay.dataset.sketchBound = "true";
+
+    // Close button
+    const btnClose = document.getElementById("btn-close-sketch");
+    if (btnClose) {
+      btnClose.addEventListener("click", () => this._hideSketchModal());
+    }
+
+    // Click outside to close
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) this._hideSketchModal();
+    });
+
+    // Tab: Show Original
+    const tabOrig = document.getElementById("tab-show-original");
+    if (tabOrig) {
+      tabOrig.addEventListener("click", () => {
+        document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
+        tabOrig.classList.add("active");
+        this._renderSketchPreview("original");
+      });
+    }
+
+    // Tab: Show Sketch
+    const tabSketch = document.getElementById("tab-show-sketch");
+    if (tabSketch) {
+      tabSketch.addEventListener("click", () => {
+        document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
+        tabSketch.classList.add("active");
+        this._renderSketchPreview("sketch");
+      });
+    }
+
+    // Blur slider with debounce
+    const blurSlider = document.getElementById("sketch-blur-slider");
+    const blurVal = document.getElementById("slider-blur-val");
+    if (blurSlider) {
+      blurSlider.addEventListener("input", () => {
+        this._sketchModalState.currentBlur = parseInt(blurSlider.value);
+        if (blurVal) blurVal.textContent = blurSlider.value;
+      });
+      blurSlider.addEventListener("change", () => {
+        this._debounceReprocessSketch();
+      });
+    }
+
+    // Contrast slider with debounce
+    const contrastSlider = document.getElementById("sketch-contrast-slider");
+    const contrastVal = document.getElementById("slider-contrast-val");
+    if (contrastSlider) {
+      contrastSlider.addEventListener("input", () => {
+        this._sketchModalState.currentContrast = parseInt(contrastSlider.value);
+        if (contrastVal) contrastVal.textContent = contrastSlider.value;
+      });
+      contrastSlider.addEventListener("change", () => {
+        this._debounceReprocessSketch();
+      });
+    }
+
+    // Download button
+    const btnDownload = document.getElementById("btn-download-sketch");
+    if (btnDownload) {
+      btnDownload.addEventListener("click", () => {
+        const canvas = this._sketchModalState.canvas;
+        if (canvas) {
+          this.sketch.downloadSketch(canvas, `sketsa-${this._sketchModalState.photo?.id || "gambar"}.png`);
+          this.ui.showToast("Sketsa diunduh ke perangkatmu!", "success");
+        }
+      });
+    }
+  }
+
+  _debounceReprocessSketch() {
+    if (this._sketchModalState.reprocessTimer) {
+      clearTimeout(this._sketchModalState.reprocessTimer);
+    }
+    this._sketchModalState.reprocessTimer = setTimeout(() => {
+      this._reprocessSketch();
+    }, 400);
+  }
+
+  async _reprocessSketch() {
+    const photo = this._sketchModalState.photo;
+    if (!photo) return;
+
+    const container = document.getElementById("sketch-preview-container");
+    if (!container) return;
+
+    container.innerHTML = `<div style="font-weight:700;color:var(--text-secondary);padding:20px;">Memproses ulang...</div>`;
+
+    try {
+      const { currentBlur, currentContrast } = this._sketchModalState;
+      const canvas = await this.sketch.convertToSketch(photo.regular, currentBlur, currentContrast, () => {});
+      this._sketchModalState.canvas = canvas;
+
+      // If sketch tab is active, show the new canvas
+      const tabSketch = document.getElementById("tab-show-sketch");
+      if (tabSketch && tabSketch.classList.contains("active")) {
+        document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
+        tabSketch.classList.add("active");
+        container.innerHTML = "";
+        container.appendChild(canvas);
+      }
+    } catch (e) {
+      console.error("Reprocess error:", e);
+      this.ui.showToast("Gagal memproses ulang sketsa", "error");
+    }
+  }
+
+  _renderSketchPreview(mode) {
+    const container = document.getElementById("sketch-preview-container");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    if (mode === "original" && this._sketchModalState.originalImg) {
+      // Clone the img element to keep reference intact
+      const imgClone = this._sketchModalState.originalImg.cloneNode(true);
+      container.appendChild(imgClone);
+    } else if (mode === "sketch" && this._sketchModalState.canvas) {
+      container.appendChild(this._sketchModalState.canvas);
+    } else {
+      container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary);">Tidak ada pratinjau.</div>`;
+    }
   }
 
   /* --- Sketch Reference COORDINATORS --- */
@@ -735,13 +883,23 @@ class App {
   }
 
   async _openSketchModal(photo) {
+    // Initialize modal event listeners once (idempotent)
+    this._initSketchModal();
+
     const overlay = document.getElementById("sketch-modal-overlay");
     const container = document.getElementById("sketch-preview-container");
     const authorEl = document.getElementById("sketch-author-link");
     const sliderBlur = document.getElementById("sketch-blur-slider");
-    const btnDownload = document.getElementById("btn-download-sketch");
+    const sliderContrast = document.getElementById("sketch-contrast-slider");
+    const blurVal = document.getElementById("slider-blur-val");
+    const contrastVal = document.getElementById("slider-contrast-val");
 
     if (!overlay || !container) return;
+
+    // Store photo reference for reprocessing
+    this._sketchModalState.photo = photo;
+    this._sketchModalState.currentBlur = sliderBlur ? parseInt(sliderBlur.value) : 10;
+    this._sketchModalState.currentContrast = sliderContrast ? parseInt(sliderContrast.value) : 10;
 
     overlay.classList.add("active");
 
@@ -750,10 +908,16 @@ class App {
       authorEl.href = photo.authorUrl;
     }
 
+    // Reset slider display values
+    if (blurVal) blurVal.textContent = this._sketchModalState.currentBlur;
+    if (contrastVal) contrastVal.textContent = this._sketchModalState.currentContrast;
+
+    // Activate sketch tab
     document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
     const tabSketch = document.getElementById("tab-show-sketch");
     if (tabSketch) tabSketch.classList.add("active");
 
+    // Show progress
     container.innerHTML = `
       <div class="sketch-progress-container">
         <div class="sketch-progress-bar-bg">
@@ -763,9 +927,6 @@ class App {
       </div>
     `;
 
-    let sketchCanvas = null;
-    let originalImgEl = null;
-
     const renderProgress = (percent) => {
       const bar = document.getElementById("sketch-progress-bar");
       const label = document.getElementById("sketch-progress-label");
@@ -773,70 +934,25 @@ class App {
       if (label) {
         if (percent < 20) label.textContent = "Memuat gambar...";
         else if (percent < 50) label.textContent = "Grayscale & filter...";
-        else if (percent < 80) label.textContent = "Blurting edges...";
+        else if (percent < 80) label.textContent = "Blurring edges...";
         else if (percent < 100) label.textContent = "Color dodging...";
         else label.textContent = "Selesai!";
       }
     };
 
     try {
-      const blurVal = sliderBlur ? parseInt(sliderBlur.value) : 10;
-      sketchCanvas = await this.sketch.convertToSketch(photo.regular, blurVal, renderProgress);
+      const { currentBlur, currentContrast } = this._sketchModalState;
+      const canvas = await this.sketch.convertToSketch(photo.regular, currentBlur, currentContrast, renderProgress);
+      this._sketchModalState.canvas = canvas;
 
-      originalImgEl = new Image();
-      originalImgEl.src = photo.regular;
-      originalImgEl.className = "animate-fade-in";
+      // Create original image reference
+      this._sketchModalState.originalImg = new Image();
+      this._sketchModalState.originalImg.src = photo.regular;
+      this._sketchModalState.originalImg.className = "animate-fade-in";
 
+      // Show sketch result
       container.innerHTML = "";
-      container.appendChild(sketchCanvas);
-
-      const tabOrig = document.getElementById("tab-show-original");
-      if (tabOrig) {
-        tabOrig.replaceWith(tabOrig.cloneNode(true));
-        document.getElementById("tab-show-original").addEventListener("click", () => {
-          document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
-          document.getElementById("tab-show-original").classList.add("active");
-          container.innerHTML = "";
-          container.appendChild(originalImgEl);
-        });
-      }
-
-      if (tabSketch) {
-        tabSketch.replaceWith(tabSketch.cloneNode(true));
-        document.getElementById("tab-show-sketch").addEventListener("click", () => {
-          document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
-          document.getElementById("tab-show-sketch").classList.add("active");
-          container.innerHTML = "";
-          container.appendChild(sketchCanvas);
-        });
-      }
-
-      if (sliderBlur) {
-        sliderBlur.replaceWith(sliderBlur.cloneNode(true));
-        const newSlider = document.getElementById("sketch-blur-slider");
-        newSlider.addEventListener("change", async () => {
-          const val = parseInt(newSlider.value);
-          container.innerHTML = `<div style="font-weight:700;color:var(--text-secondary);">Memproses ulang...</div>`;
-          try {
-            sketchCanvas = await this.sketch.convertToSketch(photo.regular, val, () => {});
-            document.querySelectorAll(".sketch-modal-tab").forEach((t) => t.classList.remove("active"));
-            document.getElementById("tab-show-sketch").classList.add("active");
-            container.innerHTML = "";
-            container.appendChild(sketchCanvas);
-          } catch (e) {
-            this.ui.showToast("Gagal memproses ulang sketsa", "error");
-          }
-        });
-      }
-
-      if (btnDownload) {
-        btnDownload.replaceWith(btnDownload.cloneNode(true));
-        const newDownload = document.getElementById("btn-download-sketch");
-        newDownload.addEventListener("click", () => {
-          this.sketch.downloadSketch(sketchCanvas, `sketsa-${photo.id}.png`);
-          this.ui.showToast("Sketsa diunduh ke perangkatmu!", "success");
-        });
-      }
+      container.appendChild(canvas);
     } catch (err) {
       console.error(err);
       container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--error);font-weight:700;">Gagal memproses gambar ke sketsa. Coba gambar lain.</div>`;
@@ -853,6 +969,14 @@ class App {
     div.textContent = str;
     return div.innerHTML;
   }
+}
+
+// Shared escapeHtml utility to avoid duplicate implementations
+function escapeHtml(str) {
+  if (typeof str !== "string") return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 // Boot application when DOM is ready
