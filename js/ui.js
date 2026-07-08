@@ -53,7 +53,8 @@ export function attachSwipeClose(panel, opts) {
     startY = 0,
     dragging = false,
     moved = 0,
-    scrollable = null;
+    scrollable = null,
+    locked = null; // 'x' | 'y' once the gesture direction is decided
 
   const base = () => (opts.getBaseTransform ? opts.getBaseTransform() : "");
 
@@ -68,6 +69,7 @@ export function attachSwipeClose(panel, opts) {
       startY = e.touches[0].clientY;
       dragging = true;
       moved = 0;
+      locked = null;
       scrollable = findScrollable(e.target, axis);
       panel.style.transition = "none";
     },
@@ -77,12 +79,46 @@ export function attachSwipeClose(panel, opts) {
   panel.addEventListener(
     "touchmove",
     (e) => {
-      if (!dragging || scrollable) return;
+      if (!dragging) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+
+      // Decide the gesture direction on the first meaningful movement so we
+      // don't hijack the panel's native scrolling.
+      if (locked === null) {
+        const adx = Math.abs(dx);
+        const ady = Math.abs(dy);
+        if (adx < 8 && ady < 8) return; // wait until we know the direction
+
+        if (axis === "x") {
+          // Horizontal swipe-close: a vertical drag must scroll natively.
+          if (ady > adx) {
+            dragging = false;
+            return;
+          }
+          locked = "x";
+        } else {
+          // Vertical swipe-close: a horizontal drag is ignored.
+          if (adx > ady) {
+            dragging = false;
+            return;
+          }
+          // Allow native scroll when the content is scrolled away from the top.
+          if (scrollable && scrollable.scrollTop > 0) {
+            dragging = false;
+            return;
+          }
+          locked = "y";
+        }
+      }
+
+      if (locked !== axis) return;
+      if (scrollable) return;
+
       // Prevent the browser's native pull-to-refresh / overscroll glow while
       // we are actively dragging the panel closed.
       if (e.cancelable) e.preventDefault();
-      const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
+
       // Lock to the requested axis and only the "closing" direction.
       if (axis === "y") {
         const d = Math.max(0, dy);
