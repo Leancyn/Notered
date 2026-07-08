@@ -61,16 +61,22 @@ function isValidPair(from, to) {
 }
 
 /**
- * Check if a pair looks like a typo->baku relationship
- * Uses edit distance to filter out non-typo pairs
+ * Check if a pair looks like a valid word variant/correction relationship.
+ * More permissive than before to include informal->formal mappings.
  */
 function isLikelyTypoPair(from, to) {
-  // If edit distance is too large, it's likely not a typo
+  // Allow pairs even with larger edit distance since informal->formal
+  // mappings can differ significantly (e.g. "nggak" -> "tidak", dist=5).
+  // We still filter out pairs that are obviously unrelated.
   const dist = levenshteinDistance(from, to);
-  if (dist > 3) return false;
+  if (dist > 8) return false;
   
-  // If one word is a prefix of another with small length difference, it might be a variant
-  if (Math.abs(from.length - to.length) > 2) return false;
+  // Allow meaningful length difference for abbreviations/slang
+  if (Math.abs(from.length - to.length) > 10) return false;
+  
+  // Heuristic: if one starts with the other, it's likely a valid relationship
+  const prefixMatch = to.startsWith(from.slice(0, 2)) || from.startsWith(to.slice(0, 2));
+  if (!prefixMatch && dist > 4) return false;
   
   return true;
 }
@@ -123,22 +129,69 @@ function extractPairsFromEntry(entry) {
   }
 
   // Case 2: parse `arti` for "something ? something"
-  // We only take the first-level candidate where left side isn't HTML tag.
-  // Remove HTML tags to simplify.
+  // Pattern 2a: "X ? Y" - variant forms
+  // Pattern 2b: "X tidak baku, Y baku" or "X = Y" patterns
   const plain = arti ? arti.replace(/<[^>]*>/g, " ").replace(/&[a-z]+;/gi, " ") : "";
 
-  // common pattern: "X ? Y" with optional prefixes like " ;".
-  // We'll capture up to 30 chars around, but stop at whitespace boundaries.
-  // Example observed: "abi·ma·na ? abaimana" => from=abimana to=abaimana
-  const re = /([^\s;,.()\[\]{}<>]{2,})\s*\?\s*([^\s;,.()\[\]{}<>]{2,})/g;
+  // Pattern 2a: "X ? Y" variant relationships
+  const reQuestion = /([^\s;,.()\[\]{}<>]{2,})\s*\?\s*([^\s;,.()\[\]{}<>]{2,})/g;
   let m;
-  while ((m = re.exec(plain))) {
+  while ((m = reQuestion.exec(plain))) {
     const fromRaw = m[1];
     const toRaw = m[2];
     const from = normalizeWord(fromRaw.replace(/[\u00B7·]/g, ""));
     const to = normalizeWord(toRaw.replace(/[\u00B7·]/g, ""));
     if (isValidPair(from, to) && isLikelyTypoPair(from, to)) {
       out.push({ from, to });
+    }
+  }
+
+  // Pattern 2b: "tidak baku" / "baku" markers - capture informal to formal mappings
+  // Examples: "tidak baku: X, baku: Y" or similar patterns
+  const reTidakBaku = /tidak\s+baku[:\s]+([^\s;,.()<>]{2,})[,\s]+baku[:\s]+([^\s;,.()<>]{2,})/gi;
+  while ((m = reTidakBaku.exec(plain))) {
+    const from = normalizeWord(m[1]);
+    const to = normalizeWord(m[2]);
+    if (isValidPair(from, to) && isLikelyTypoPair(from, to)) {
+      out.push({ from, to });
+    }
+  }
+
+  // Pattern 2c: "X = Y" equality patterns
+  const reEqual = /([a-z]{3,})\s*=\s*([a-z]{3,})/gi;
+  while ((m = reEqual.exec(plain))) {
+    const from = normalizeWord(m[1]);
+    const to = normalizeWord(m[2]);
+    if (isValidPair(from, to) && isLikelyTypoPair(from, to)) {
+      out.push({ from, to });
+    }
+  }
+
+  // Pattern 2d: "Lihat: X" -> X refers to the canonical form
+  const reLihat = /lihat[:\s]+([\p{L}]{2,})/gi;
+  while ((m = reLihat.exec(plain))) {
+    // For "Lihat" patterns, the current word might be a variant of the referenced word
+    // We skip direct extraction here since it requires context.
+    // The cross-reference resolution is handled in _resolveKbbiCrossReference.
+  }
+
+  // Pattern 2e: "bentuk tidak baku: X" or "tidak baku: X" followed by a formal word
+  const reBentukTidakBaku = /bentuk\s+tidak\s+baku[:\s]+([\p{L}]{2,})/gi;
+  while ((m = reBentukTidakBaku.exec(plain))) {
+    const informal = normalizeWord(m[1]);
+    // We can't determine the formal form from this pattern alone,
+    // but we can mark it if the current `word` entry itself is the formal form
+    if (word && word !== informal && isValidPair(informal, word.toLowerCase()) && isLikelyTypoPair(informal, word.toLowerCase())) {
+      out.push({ from: informal, to: word.toLowerCase() });
+    }
+  }
+
+  // Pattern 2f: "varian dari: X" or "varian: X"
+  const reVarian = /varian\s+(?:dari\s+)?[:\s]+([\p{L}]{2,})/gi;
+  while ((m = reVarian.exec(plain))) {
+    const from = normalizeWord(m[1]);
+    if (word && word !== from && isValidPair(from, word.toLowerCase()) && isLikelyTypoPair(from, word.toLowerCase())) {
+      out.push({ from, to: word.toLowerCase() });
     }
   }
 

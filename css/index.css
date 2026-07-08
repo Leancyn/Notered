@@ -5,8 +5,8 @@
  * Defines base typography, reset, scrollbars, and core global styles.
  */
 
-/* Import Nunito Font from Google Fonts */
-@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap");
+/* Nunito is now imported via inline <style> in index.html for earlier loading */
+/* This file comment kept for reference, font loaded from HTML head */
 
 :root {
   /* Colors - Warm Yellow Eye-Friendly Palette */
@@ -253,9 +253,8 @@ textarea,
 
 /* Segmented control for search source */
 .source-segment {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  display: flex;
+  gap: 4px;
 }
 
 .source-seg-btn {
@@ -263,26 +262,30 @@ textarea,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 10px 6px;
+  gap: 1px;
+  padding: 6px 4px;
   border: 1.5px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--bg-primary);
   color: var(--text-secondary);
   cursor: pointer;
   font-family: inherit;
   transition: all 0.18s ease;
+  flex: 1;
+  min-width: 0;
 }
 
 .source-seg-btn strong {
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   font-weight: 800;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .source-seg-btn small {
-  font-size: 0.62rem;
+  font-size: 0.5rem;
   opacity: 0.75;
+  white-space: nowrap;
 }
 
 .source-seg-btn.active {

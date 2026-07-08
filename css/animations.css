@@ -1,8 +1,8 @@
 /* 
  * animations.css - CSS Micro-Animations & Transitions
  * 
- * Provides smooth, iOS-like cubic-bezier transitions, idle animations
- * for the cat mascot, loading skeleton shimmers, and page transitions.
+ * Smooth, iOS-like cubic-bezier transitions, idle animations
+ * for the cute cat mascot, loading skeleton shimmers, and page transitions.
  */
 
 /* Transitions definitions */
@@ -23,6 +23,7 @@
   display: none;
   opacity: 0;
   transform: translateY(10px);
+  contain: layout style paint;
 }
 
 .view-panel.active {
@@ -30,7 +31,6 @@
   animation: fadeIn 0.3s ease forwards;
 }
 
-/* Consolidated fadeIn for reuse across modules */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -40,55 +40,99 @@
   animation: fadeIn 0.4s ease forwards;
 }
 
-/* Mascot idle: Cat Tail Wagging */
-@keyframes catTailWag {
-  0% { transform: rotate(-5deg); }
-  100% { transform: rotate(5deg); }
+/* ===== CUTE CAT MASCOT ANIMATIONS ===== */
+
+/* Body gentle bob (kawaii sway) */
+@keyframes catBodyBob {
+  0% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1.5px) rotate(0.5deg); }
+  100% { transform: translateY(0) rotate(0deg); }
 }
 
-.animate-tail {
-  transform-origin: 85px 65px;
-  animation: catTailWag 2s ease-in-out infinite alternate;
+.animate-bob {
+  transform-origin: 50px 90px;
+  animation: catBodyBob 3s ease-in-out infinite;
 }
 
-/* Mascot idle: Cat Blink */
+/* Tail gentle sweep */
+@keyframes catTailSweep {
+  0% { transform: rotate(-3deg); }
+  50% { transform: rotate(8deg); }
+  100% { transform: rotate(-3deg); }
+}
+
+.animate-tail-sweep {
+  transform-origin: 80px 80px;
+  animation: catTailSweep 3.5s ease-in-out infinite;
+}
+
+/* Blink (slow, cute) */
 @keyframes catBlink {
-  0%, 90%, 100% { transform: scaleY(1); }
-  95% { transform: scaleY(0.1); }
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.08); }
 }
 
 .animate-blink {
-  animation: catBlink 5s infinite;
+  animation: catBlink 4.5s infinite;
+  will-change: transform;
 }
 
-/* Mascot idle: Breathe */
-@keyframes catBreathe {
-  0% { transform: scaleY(1); }
-  100% { transform: scaleY(1.03) translateY(-1px); }
+/* Ear twitch (occasional) */
+@keyframes earTwitch {
+  0%, 96%, 100% { transform: rotate(0deg); }
+  98% { transform: rotate(-6deg); }
 }
 
-.animate-breathe {
-  transform-origin: 50px 95px;
-  animation: catBreathe 2s ease-in-out infinite alternate;
+.animate-ear-twitch {
+  animation: earTwitch 7s infinite;
 }
 
-/* Mascot idle: Ear Twitch */
-@keyframes earTwitchLeft {
+/* Head tilt (subtle) */
+@keyframes headTilt {
   0%, 90%, 100% { transform: rotate(0deg); }
-  92% { transform: rotate(-8deg); }
-  95% { transform: rotate(4deg); }
-}
-@keyframes earTwitchRight {
-  0%, 92%, 100% { transform: rotate(0deg); }
-  94% { transform: rotate(8deg); }
-  97% { transform: rotate(-4deg); }
+  93% { transform: rotate(3deg); }
+  96% { transform: rotate(-1deg); }
 }
 
-.animate-ear-left {
-  animation: earTwitchLeft 6s infinite;
+.animate-head-tilt {
+  transform-origin: 50px 55px;
+  animation: headTilt 6s ease-in-out infinite;
 }
-.animate-ear-right {
-  animation: earTwitchRight 7s infinite;
+
+/* Paw shuffle (tiny movement) */
+@keyframes pawShuffle {
+  0%, 80%, 100% { transform: translateY(0); }
+  85% { transform: translateY(-2px); }
+  90% { transform: translateY(-1px); }
+}
+
+.animate-paw-shuffle {
+  animation: pawShuffle 5s ease-in-out infinite;
+}
+
+/* Loading screen: gentle float */
+@keyframes floatPulse {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+
+.animate-float {
+  animation: floatPulse 2.5s ease-in-out infinite;
+}
+
+/* Happy bounce (triggered on spell fix) */
+@keyframes happyBounce {
+  0% { transform: translateY(0) scale(1); }
+  20% { transform: translateY(-6px) scale(1.02); }
+  40% { transform: translateY(-3px) scale(0.98); }
+  60% { transform: translateY(-5px) scale(1.01); }
+  80% { transform: translateY(-2px) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.mascot-happy-bounce {
+  animation: happyBounce 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
 /* Pop-in animation for Mascot state change */
@@ -104,12 +148,8 @@
 
 /* Shimmer Loading Skeleton */
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .loading-shimmer {
@@ -118,95 +158,46 @@
   animation: shimmer 1.5s infinite;
 }
 
-/* Slide up / iOS modal animation */
+/* Slide up */
 @keyframes slideUp {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
-/* Pop-in animation */
+/* Pop-in */
 @keyframes popIn {
-  0% {
-    transform: scale(0.9);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .animate-pop-in {
   animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
-/* Bounce in for badges/paw-prints */
+/* Bounce in */
 @keyframes bounceIn {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.8;
-  }
-  70% {
-    transform: scale(0.9);
-    opacity: 0.9;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  70% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .animate-bounce-in {
   animation: bounceIn 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
-/* Cat ears twitching on hover */
-@keyframes earTwitchLeft {
-  0%, 80%, 100% { transform: rotate(0deg); }
-  85%, 95% { transform: rotate(-5deg); }
-}
-
-@keyframes earTwitchRight {
-  0%, 80%, 100% { transform: rotate(0deg); }
-  85%, 95% { transform: rotate(5deg); }
-}
-
-.twitch-left {
-  transform-origin: bottom right;
-  animation: earTwitchLeft 6s infinite;
-}
-
-.twitch-right {
-  transform-origin: bottom left;
-  animation: earTwitchRight 6.2s infinite;
-}
-
 /* Pulse for spelling warning */
 @keyframes pulseWarning {
-  0% {
-    box-shadow: 0 0 0 0 rgba(240, 160, 80, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(240, 160, 80, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(240, 160, 80, 0);
-  }
+  0% { box-shadow: 0 0 0 0 rgba(240, 160, 80, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(240, 160, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(240, 160, 80, 0); }
 }
 
 .pulse-warning {
   animation: pulseWarning 2s infinite;
 }
 
-/* Reduce Motion media query overrides */
+/* Reduce Motion */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
@@ -214,4 +205,24 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ===== PERFORMANCE ===== */
+.gpu-accelerated {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+img[decoding="async"] {
+  content-visibility: auto;
+  contain: layout style paint;
+}
+
+.editor-area-wrapper {
+  contain: layout style;
+}
+
+.editor-container {
+  contain: layout style;
 }

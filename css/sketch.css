@@ -10,7 +10,19 @@
   flex-direction: column;
   height: 100%;
   padding: 16px;
+  overflow: hidden;
+}
+
+.sketch-container > .sketch-upload-zone,
+.sketch-container > .search-wrapper {
+  flex-shrink: 0;
+}
+
+#sketch-results-grid {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding-bottom: 8px;
 }
 
 @media (min-width: 768px) {
@@ -183,8 +195,16 @@
 .sketch-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 10px;
+  padding: 0 0 8px 0;
+  margin: 0;
+  align-content: start;
+}
+
+@media (min-width: 480px) {
+  .sketch-grid {
+    gap: 12px;
+  }
 }
 
 @media (min-width: 640px) {
@@ -202,7 +222,7 @@
 
 .sketch-card {
   position: relative;
-  aspect-ratio: 1;
+  width: 100%;
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -210,6 +230,10 @@
   cursor: pointer;
   background-color: var(--bg-secondary);
   transition: transform 0.2s, box-shadow 0.2s;
+  display: block;
+  /* Use padding-bottom for aspect ratio instead of aspect-ratio for better mobile support */
+  padding-bottom: 100%;
+  height: 0;
 }
 
 .sketch-card:hover {
@@ -222,6 +246,10 @@
 }
 
 .sketch-card img {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -240,6 +268,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
 /* Sketch Conversion Overlay Modal */

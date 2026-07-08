@@ -756,27 +756,46 @@ class App {
   }
 
   _updateMascotMood(mood) {
-    // NOTE: the editor cat mascot SVG uses ids "eye-left-shape",
-    // "eye-right-shape", and "mascot-mouth". These must match or the
-    // function bails out early and the mood is never applied.
+    // Chibi mascot uses ellipse eyes and a 'w' mouth path
     const eyeLeft = document.getElementById("eye-left-shape");
     const eyeRight = document.getElementById("eye-right-shape");
     const mouth = document.getElementById("mascot-mouth");
+    const bodyGroup = document.getElementById("mascot-body-group");
 
     if (!eyeLeft || !eyeRight || !mouth) return;
 
     if (mood === "happy") {
-      eyeLeft.setAttribute("d", "M 14,14 A 2,2 0 0,1 18,14");
-      eyeRight.setAttribute("d", "M 22,14 A 2,2 0 0,1 26,14");
-      mouth.setAttribute("d", "M 17,21 Q 20,24 23,21");
+      // Happy: squint eyes (smaller height), big smile
+      eyeLeft.setAttribute("rx", "5.5");
+      eyeLeft.setAttribute("ry", "4");
+      eyeRight.setAttribute("rx", "5.5");
+      eyeRight.setAttribute("ry", "4");
+      mouth.setAttribute("d", "M 44 61 Q 47 66 50 61 Q 53 66 56 61");
+
+      // Happy bounce on body
+      if (bodyGroup) {
+        bodyGroup.classList.remove("animate-bob");
+        void bodyGroup.offsetWidth;
+        bodyGroup.classList.add("mascot-happy-bounce");
+        setTimeout(() => {
+          bodyGroup.classList.remove("mascot-happy-bounce");
+          bodyGroup.classList.add("animate-bob");
+        }, 800);
+      }
     } else if (mood === "worried") {
-      eyeLeft.setAttribute("d", "M 13,13 L 17,15");
-      eyeRight.setAttribute("d", "M 27,13 L 23,15");
-      mouth.setAttribute("d", "M 18,22 Q 20,20 22,22");
+      // Worried: wider eyes, wavy mouth
+      eyeLeft.setAttribute("rx", "6");
+      eyeLeft.setAttribute("ry", "7");
+      eyeRight.setAttribute("rx", "6");
+      eyeRight.setAttribute("ry", "7");
+      mouth.setAttribute("d", "M 45 62 Q 47.5 60 50 62 Q 52.5 60 55 62");
     } else {
-      eyeLeft.setAttribute("d", "M 15 15 A 1.5 1.5 0 1 1 15 14.9");
-      eyeRight.setAttribute("d", "M 25 15 A 1.5 1.5 0 1 1 25 14.9");
-      mouth.setAttribute("d", "M 18,20 Q 20,22 22,20");
+      // Neutral: normal round eyes, cute 'w' mouth
+      eyeLeft.setAttribute("rx", "5.5");
+      eyeLeft.setAttribute("ry", "6.5");
+      eyeRight.setAttribute("rx", "5.5");
+      eyeRight.setAttribute("ry", "6.5");
+      mouth.setAttribute("d", "M 45.5 60 Q 48 63 50 60 Q 52 63 54.5 60");
     }
   }
 

@@ -98,8 +98,8 @@ export class SpellChecker {
     });
 
     if (extracted && Object.keys(extracted).length > 0) {
-      // Merge — static maps have priority (they are manually curated)
-      this.typoMap = Object.assign(Object.create(null), extracted, TYPO_MAP);
+      // Merge — extracted KBBI data has highest priority, fallback to static maps
+      this.typoMap = Object.assign(Object.create(null), TYPO_MAP, extracted);
       this._autocorrect = this._buildAutocorrect();
     }
 

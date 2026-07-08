@@ -130,13 +130,13 @@
   color: var(--text-secondary);
 }
 
-/* Mascot - interactive cat */
+/* Mascot - cute chibi cat */
 .cat-mascot-wrapper {
   position: absolute;
-  bottom: 24px;
-  right: 24px;
-  width: 100px;
-  height: 100px;
+  bottom: 20px;
+  right: 16px;
+  width: 90px;
+  height: 90px;
   pointer-events: none;
   z-index: 10;
   opacity: 0.9;
@@ -145,10 +145,10 @@
 
 @media (min-width: 768px) {
   .cat-mascot-wrapper {
-    width: 140px;
-    height: 140px;
-    bottom: 30px;
-    right: 30px;
+    width: 120px;
+    height: 120px;
+    bottom: 24px;
+    right: 24px;
   }
 }
 
