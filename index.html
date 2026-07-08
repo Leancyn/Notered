@@ -10,7 +10,7 @@
 
   <!-- SEO Meta Tags -->
   <meta name="description"
-    content="Notered adalah asisten menulis Bahasa Indonesia per kata berbasis KBBI dengan fitur sketsa referensi kucing yang ramah dan interaktif.">
+    content="Notered adalah kucing imut penjaga kata berbasis KBBI dengan fitur sketsa referensi kucing yang ramah dan interaktif. meow~">
   <meta name="author" content="Notered Team">
   <meta name="theme-color" content="#FFFDF5">
 
@@ -23,6 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://api.unsplash.com">
+  <link rel="preconnect" href="https://api.openverse.org">
+  <link rel="preconnect" href="https://commons.wikimedia.org">
 
   <!-- Core and Features CSS (critical) -->
   <link rel="stylesheet" href="css/index.css">
@@ -107,7 +109,11 @@
         <path
           d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14H7v-2h6v2zm4-4H7v-2h10v2zm0-4H7V6h10v2z" />
       </svg>
-      <span>Notered <span class="header-subtitle">For Mira</span></span>
+      <span class="logo-text">Notered <span class="header-subtitle">For Mira</span></span>
+      <svg class="header-heart" viewBox="0 0 24 24" aria-hidden="true" title="Notered for Mira">
+        <path
+          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      </svg>
     </div>
     <div class="header-actions">
       <!-- Document actions -->
@@ -145,8 +151,8 @@
             <svg class="cat-mascot-svg" viewBox="0 0 100 100" overflow="visible">
               <g class="mascot-body-group animate-breathe">
                 <!-- Tail -->
-                <path d="M 75 80 Q 95 80 90 55" fill="none" stroke="#F2A65A" stroke-width="8"
-                  stroke-linecap="round" class="animate-tail" />
+                <path d="M 75 80 Q 95 80 90 55" fill="none" stroke="#F2A65A" stroke-width="8" stroke-linecap="round"
+                  class="animate-tail" />
 
                 <!-- Body -->
                 <path d="M 30 95 C 30 70 70 70 70 95 Z" fill="#F2A65A" />
@@ -189,10 +195,8 @@
                   stroke-width="2" stroke-linecap="round" />
 
                 <!-- Paws -->
-                <path d="M 32 95 C 32 85 42 85 42 95 Z" fill="#F2A65A" stroke="rgba(0,0,0,0.05)"
-                  stroke-width="1" />
-                <path d="M 58 95 C 58 85 68 85 68 95 Z" fill="#F2A65A" stroke="rgba(0,0,0,0.05)"
-                  stroke-width="1" />
+                <path d="M 32 95 C 32 85 42 85 42 95 Z" fill="#F2A65A" stroke="rgba(0,0,0,0.05)" stroke-width="1" />
+                <path d="M 58 95 C 58 85 68 85 68 95 Z" fill="#F2A65A" stroke="rgba(0,0,0,0.05)" stroke-width="1" />
               </g>
             </svg>
           </div>
@@ -224,7 +228,8 @@
           <div class="sketch-upload-inner">
             <div class="sketch-upload-icon-wrap">
               <svg class="sketch-upload-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M19 13v6H5v-6H3v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2zM13 4.83l2.59 2.58L17 6l-5-5-5 5 1.41 1.41L11 4.83V15h2V4.83z" />
+                <path
+                  d="M19 13v6H5v-6H3v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2zM13 4.83l2.59 2.58L17 6l-5-5-5 5 1.41 1.41L11 4.83V15h2V4.83z" />
               </svg>
             </div>
             <div class="sketch-upload-text">Ketuk untuk unggah atau ambil foto</div>
@@ -337,12 +342,40 @@
       </button>
     </div>
 
-    <div class="settings-group">
-      <label class="settings-label" for="settings-unsplash-key">Unsplash API Key (Untuk Cari Gambar)</label>
-      <input type="password" id="settings-unsplash-key" class="settings-input"
-        placeholder="Masukkan Client ID Unsplash...">
-      <p style="font-size:0.75rem;color:var(--text-secondary);line-height:1.4;">Bisa dikosongkan. Jika kosong, akan
-        menggunakan demo placeholder secara offline.</p>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <span>Pencarian Gambar Sketsa</span>
+      </div>
+
+      <div class="settings-group">
+        <label class="settings-label" for="settings-unsplash-key">Unsplash API Key</label>
+        <input type="password" id="settings-unsplash-key" class="settings-input"
+          placeholder="Kosongkan = pakai key bawaan">
+        <p style="font-size:0.72rem;color:var(--text-secondary);line-height:1.4;">Bisa dikosongkan, otomatis memakai
+          API key bawaan (proyek pribadi). Isi hanya untuk menimpa dengan key kamu sendiri.</p>
+      </div>
+
+      <div class="settings-group">
+        <label class="settings-label">Sumber Pencarian</label>
+        <div class="source-segment" id="settings-search-source" role="radiogroup" aria-label="Sumber Pencarian Gambar">
+          <button type="button" class="source-seg-btn" data-source="unsplash">
+            <strong>Unsplash</strong><small>Perlu API Key</small>
+          </button>
+          <button type="button" class="source-seg-btn" data-source="wikimedia">
+            <strong>Wikimedia</strong><small>Tanpa Key</small>
+          </button>
+          <button type="button" class="source-seg-btn" data-source="openverse">
+            <strong>Openverse</strong><small>Tanpa Key</small>
+          </button>
+        </div>
+        <p style="font-size:0.72rem;color:var(--text-secondary);line-height:1.4;">Pilih API yang dipakai untuk mencari
+          referensi gambar sketsa.</p>
+      </div>
     </div>
 
     <div class="settings-group">

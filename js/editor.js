@@ -88,11 +88,21 @@ export class Editor {
       }
     });
 
-    // ── Click: show suggestion popup for error/warning words
-    this.el.addEventListener('click', (e) => {
+    // ── Tap on highlighted word: open suggestion sheet WITHOUT focusing the
+    //    editor (prevents the mobile soft keyboard from popping up).
+    //    We intercept mousedown/touchstart and call preventDefault() so the
+    //    contenteditable never receives focus / opens the keyboard.
+    const openWordFromSpan = (e) => {
       const wordSpan = e.target.closest('.word-error, .word-warning');
-      if (wordSpan) this._onWordClick(wordSpan, e);
-    });
+      if (!wordSpan) return;
+      // Stop the editor from focusing / opening the soft keyboard.
+      e.preventDefault();
+      // Close the keyboard if it was already open (e.g. mid-typing).
+      if (document.activeElement === this.el) this.el.blur();
+      this._onWordClick(wordSpan, e);
+    };
+    this.el.addEventListener('mousedown', openWordFromSpan);
+    this.el.addEventListener('touchstart', openWordFromSpan, { passive: false });
 
     // ── Keyboard: shortcuts only (no Enter interception — let browser handle it)
     this.el.addEventListener('keydown', (e) => {

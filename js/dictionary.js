@@ -161,6 +161,15 @@ export class Dictionary {
               .filter(Boolean);
 
             this._populate(wordList);
+            // IMPORTANT: Reset definitions before populating from the fresh
+            // authoritative source. The cached defs (loaded from IndexedDB
+            // just above) are only a warm-start; merging fresh defs INTO the
+            // cached map would concatenate the same definition on every reload
+            // and accumulate duplicates (e.g. "Lihat enyah" ×N). The fresh
+            // JSON is authoritative, so intra-file duplicates are still merged
+            // correctly within this single pass, but no cross-reload
+            // accumulation can occur.
+            this._definitions = new Map();
             this._populateDefinitions(dict);
             this._isLoaded = true;
 

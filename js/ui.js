@@ -5,6 +5,106 @@
  * active tab switching, and animations.
  */
 
+/**
+ * Find the nearest scrollable ancestor of a touch target (an element with
+ * overflow auto/scroll that actually has content to scroll). Used to avoid
+ * hijacking native scrolling when the user swipes inside a scroll area.
+ */
+function findScrollable(node) {
+  let el = node;
+  while (el && el !== document.body) {
+    const style = getComputedStyle(el);
+    const oy = style.overflowY || style.overflow;
+    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Enable swipe-to-dismiss on a panel for touch devices.
+ * @param {HTMLElement} panel - The sliding element to drag.
+ * @param {object} opts
+ * @param {string} opts.axis - 'y' (drag down to close) or 'x' (drag right to close).
+ * @param {function} opts.onClose - Called when the swipe passes the threshold.
+ * @param {function} opts.getBaseTransform - Returns the base CSS transform (no trailing translate).
+ */
+export function attachSwipeClose(panel, opts) {
+  if (!panel || panel.dataset.swipeBound) {
+    if (panel) panel.dataset.swipeBound = 'true';
+    return;
+  }
+  panel.dataset.swipeBound = 'true';
+
+  const axis = opts.axis || 'y';
+  let startX = 0, startY = 0, dragging = false, moved = 0, scrollable = null;
+
+  const base = () => (opts.getBaseTransform ? opts.getBaseTransform() : '');
+
+  panel.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    // Don't hijack touches that start on interactive controls (sliders,
+    // buttons, links, inputs).
+    if (e.target.closest('input, button, a, textarea, select')) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dragging = true;
+    moved = 0;
+    scrollable = findScrollable(e.target);
+    panel.style.transition = 'none';
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', (e) => {
+    if (!dragging || scrollable) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    // Lock to the requested axis and only the "closing" direction.
+    if (axis === 'y') {
+      const d = Math.max(0, dy);
+      moved = d;
+      panel.style.transform = `${base()} translateY(${d}px)`;
+    } else {
+      const d = Math.max(0, dx);
+      moved = d;
+      panel.style.transform = `${base()} translateX(${d}px)`;
+    }
+  }, { passive: true });
+
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    scrollable = null;
+    panel.style.transition = 'transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94)';
+
+    if (moved > 80) {
+      // Animate fully off-screen, then call the close handler.
+      if (axis === 'y') panel.style.transform = `${base()} translateY(100%)`;
+      else panel.style.transform = `${base()} translateX(100%)`;
+
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        panel.removeEventListener('transitionend', finish);
+        panel.style.transition = '';
+        panel.style.transform = '';
+        opts.onClose && opts.onClose();
+      };
+      panel.addEventListener('transitionend', finish);
+      setTimeout(finish, 320);
+    } else {
+      // Snap back to open position.
+      panel.style.transform = '';
+      setTimeout(() => { panel.style.transition = ''; }, 260);
+    }
+  };
+
+  panel.addEventListener('touchend', end);
+  panel.addEventListener('touchcancel', end);
+}
+
 export class UI {
   constructor() {
     this._toastContainer = null;
@@ -38,6 +138,32 @@ export class UI {
     }
     if (this._settingsOverlay) {
       this._settingsOverlay.addEventListener("click", () => this.hideSettings());
+    }
+
+    // Enable mobile swipe-to-close gestures.
+    // Bottom sheet: drag down to dismiss (accounts for desktop centering).
+    if (this._bottomSheet) {
+      attachSwipeClose(this._bottomSheet, {
+        axis: 'y',
+        onClose: () => this.hideBottomSheet(),
+        getBaseTransform: () => {
+          const cs = getComputedStyle(this._bottomSheet);
+          // On wide screens the active sheet is centered with translate(-50%, -20px)
+          if (window.matchMedia('(min-width: 1024px)').matches) return 'translate(-50%, -20px)';
+          return 'translateY(0)';
+        },
+      });
+    }
+    // Settings panel: drag right to dismiss.
+    if (this._settingsPanel) {
+      attachSwipeClose(this._settingsPanel, {
+        axis: 'x',
+        onClose: () => this.hideSettings(),
+        getBaseTransform: () => {
+          if (window.matchMedia('(min-width: 1024px)').matches) return 'translate(-50%, -50%) scale(1)';
+          return 'translateX(0)';
+        },
+      });
     }
   }
 
@@ -95,6 +221,40 @@ export class UI {
     const titleEl = this._bottomSheet.querySelector(".bottom-sheet-title");
     const subtitleEl = this._bottomSheet.querySelector(".bottom-sheet-subtitle");
     const contentEl = this._bottomSheet.querySelector(".bottom-sheet-content");
+
+    // Share mode (Bagikan Tulisan) gets a dedicated, cleaner layout
+    if (options.isShare) {
+      if (titleEl) titleEl.textContent = options.title || "Bagikan Tulisan";
+      if (subtitleEl) subtitleEl.textContent = options.subtitle || "";
+
+      contentEl.innerHTML = "";
+      const list = document.createElement("div");
+      list.className = "share-option-list";
+
+      const shareItems = options.shareItems || [];
+      shareItems.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.className = "share-option";
+        btn.type = "button";
+        btn.innerHTML = `
+          <span class="share-option-icon" style="background:${item.bg || "var(--bg-tertiary)"};">
+            ${item.icon || ""}
+          </span>
+          <span class="share-option-label">${item.label}</span>
+          <svg class="share-option-chevron" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        `;
+        btn.addEventListener("click", () => {
+          if (item.onClick) item.onClick();
+          if (!item.keepOpen) this.hideBottomSheet();
+        });
+        list.appendChild(btn);
+      });
+
+      contentEl.appendChild(list);
+      this._bottomSheetOverlay.classList.add("active");
+      this._bottomSheet.classList.add("active");
+      return;
+    }
 
     if (titleEl) titleEl.textContent = `Kata: "${options.title}" (mew~)`;
     if (subtitleEl) subtitleEl.textContent = options.subtitle || "";

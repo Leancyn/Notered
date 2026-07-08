@@ -6,7 +6,7 @@
  * Extended with Mood Tracker, Journal Prompts, Theme Picker & Affirmations.
  */
 
-import { UI } from "./ui.js";
+import { UI, attachSwipeClose } from "./ui.js";
 import { Dictionary } from "./dictionary.js";
 import { SpellChecker } from "./spellcheck.js";
 import { Editor } from "./editor.js";
@@ -137,6 +137,38 @@ class App {
         Storage.saveSettings(curr);
         this.sketch.setApiKey(key);
         this.ui.showToast("API Key Unsplash disimpan", "success");
+      });
+    }
+
+    // Search source selector (Unsplash / Wikimedia / Openverse) — segmented buttons
+    const sourceContainer = document.getElementById("settings-search-source");
+    if (sourceContainer) {
+      const sourceButtons = Array.from(sourceContainer.querySelectorAll(".source-seg-btn"));
+      const savedSource = settings.searchSource || "unsplash";
+
+      const applyActiveSource = (source) => {
+        sourceButtons.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.source === source);
+        });
+      };
+      applyActiveSource(savedSource);
+
+      sourceButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const source = btn.dataset.source;
+          const curr = Storage.loadSettings();
+          curr.searchSource = source;
+          Storage.saveSettings(curr);
+          this.sketch.setSource(source);
+          this.sketch.clearCache();
+          applyActiveSource(source);
+          this.ui.showToast(`Sumber pencarian: ${source}`, "info");
+          // Refresh current results if a query is present
+          const inputSearch = document.getElementById("sketch-search-input");
+          if (inputSearch && inputSearch.value.trim()) {
+            this.sketch.search(inputSearch.value.trim());
+          }
+        });
       });
     }
 
@@ -613,6 +645,11 @@ class App {
         }
       }
 
+      // Resolve KBBI cross-reference definitions ("Lihat enyah", "Lihat: X",
+      // "Lihat <word>"). These do not carry a real definition, so follow the
+      // reference and show the target word's definition instead.
+      defText = await this._resolveKbbiCrossReference(defText);
+
       // Validate and format definition using KBBI validator first
       let validatedDef = "";
       let formattedDef = "";
@@ -657,9 +694,56 @@ class App {
     }
   }
 
+  /**
+   * Resolve a KBBI cross-reference definition to the real target definition.
+   *
+   * Some dictionary entries don't carry their own definition — they just point
+   * to another word, e.g. "Lihat enyah", "Lihat: enyah", or "lihat kata X".
+   * Rendering those verbatim is useless (the user sees "Lihat enyah" with no
+   * meaning). This follows the reference up to one level and returns the
+   * target word's actual definition text.
+   *
+   * @param {string|null} defText
+   * @returns {Promise<string|null>}
+   */
+  async _resolveKbbiCrossReference(defText) {
+    if (!defText) return defText;
+
+    // Match "Lihat", "Lihat:", "lihat" followed by the target word.
+    const m = defText.match(/^\s*lihat\s*:?\s*([\p{L}\p{M}.·'-]+(?:\s[\p{L}\p{M}.·'-]+)?)/ui);
+    if (!m) return defText;
+
+    const target = m[1].trim().toLowerCase();
+    if (!target || target === (this.dictionary ? '' : '')) return defText;
+
+    // Look up the target word in the dictionary.
+    let targetDef = this.dictionary.getDefinition(target);
+    if (!targetDef || !targetDef.arti) {
+      const capitalized = target.charAt(0).toUpperCase() + target.slice(1);
+      targetDef = this.dictionary.getDefinition(capitalized);
+    }
+    if (!targetDef || !targetDef.arti) {
+      try {
+        const apiResult = await KbbiApi.lookup(target);
+        if (apiResult && apiResult.def) {
+          return apiResult.def;
+        }
+      } catch (_) {
+        // fall through to original text
+      }
+    } else {
+      return targetDef.arti;
+    }
+
+    return defText;
+  }
+
   _updateMascotMood(mood) {
-    const eyeLeft = document.getElementById("mascot-eye-left");
-    const eyeRight = document.getElementById("mascot-eye-right");
+    // NOTE: the editor cat mascot SVG uses ids "eye-left-shape",
+    // "eye-right-shape", and "mascot-mouth". These must match or the
+    // function bails out early and the mood is never applied.
+    const eyeLeft = document.getElementById("eye-left-shape");
+    const eyeRight = document.getElementById("eye-right-shape");
     const mouth = document.getElementById("mascot-mouth");
 
     if (!eyeLeft || !eyeRight || !mouth) return;
@@ -691,7 +775,7 @@ class App {
 
     this.editor.setContent(
       "Hai, sayang! Selamat datang di Notered~ meow!\n\n" +
-        "Aku adalah asisten menulis Bahasa Indonesia per kata yang super ramah. " +
+        "Aku adalah kucing imut penjaga kata yang super ramah meow~ " +
         "Ketik tulisanmu di sini, ya! Kata yang salah eja akan kusorot dengan garis bawah gelombang merah " +
         "(misal: mnulis atau memotongg), sedangkan kata tidak baku akan kutunggulkan dengan garis bawah kuning " +
         "(misal: nggak atau udah).\n\n" +
@@ -714,32 +798,75 @@ class App {
       return;
     }
 
-    this.ui.showBottomSheet({
-      title: "Bagikan Tulisan",
-      subtitle: "Pilih format export tulisanmu",
-      suggestions: ["Copy ke Clipboard", "Download File .txt", "Download Laporan Koreksi"],
-      onSelect: async (option) => {
-        if (option === "Copy ke Clipboard") {
-          const ok = await Export.copyToClipboard(text);
-          if (ok) this.ui.showToast("Teks berhasil disalin ke clipboard", "success");
-        } else if (option === "Download File .txt") {
-          Export.downloadTxt(text);
-          this.ui.showToast("File .txt didownload", "success");
-        } else if (option === "Download Laporan Koreksi") {
-          const errs = [];
-          const spans = document.querySelectorAll(".word-error, .word-warning");
-          spans.forEach((span) => {
-            errs.push({
-              word: span.dataset.word,
-              type: span.classList.contains("word-error") ? "error" : "tidak_baku",
-              suggestions: JSON.parse(span.dataset.suggestions || "[]"),
+    const buildShareItems = async () => {
+      const items = [];
+
+      // Native Web Share (share sheet OS) — best UX on mobile
+      if (navigator.share) {
+        items.push({
+          label: "Bagikan ke Aplikasi",
+          bg: "var(--accent-soft)",
+          icon: `<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:var(--text-primary);"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.8 2.04.8 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.3 2.04-.8l7.05 4.12c-.05.22-.09.45-.09.68 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3z"/></svg>`,
+          onClick: async () => {
+            const ok = await Export.share(text, "Notered Draft");
+            if (ok) this.ui.showToast("Tulisan dibagikan (meow~)", "success");
+          },
+        });
+      }
+
+      items.push(
+        {
+          label: "Salin ke Clipboard",
+          bg: "rgba(109, 191, 115, 0.18)",
+          icon: `<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:var(--text-primary);"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`,
+          onClick: async () => {
+            const ok = await Export.copyToClipboard(text);
+            if (ok) this.ui.showToast("Teks berhasil disalin ke clipboard", "success");
+          },
+        },
+        {
+          label: "Download File .txt",
+          bg: "rgba(90, 160, 230, 0.18)",
+          icon: `<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:var(--text-primary);"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>`,
+          onClick: () => {
+            Export.downloadTxt(text);
+            this.ui.showToast("File .txt didownload", "success");
+          },
+        },
+        {
+          label: "Download Laporan Koreksi",
+          bg: "rgba(240, 168, 168, 0.18)",
+          icon: `<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:var(--text-primary);"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`,
+          onClick: () => {
+            const errs = [];
+            const spans = document.querySelectorAll(".word-error, .word-warning");
+            spans.forEach((span) => {
+              errs.push({
+                word: span.dataset.word,
+                type: span.classList.contains("word-error") ? "error" : "tidak_baku",
+                suggestions: JSON.parse(span.dataset.suggestions || "[]"),
+              });
             });
-          });
-          Export.downloadReport(text, errs);
-          this.ui.showToast("Laporan koreksi diunduh", "success");
-        }
-      },
-    });
+            Export.downloadReport(text, errs);
+            this.ui.showToast("Laporan koreksi diunduh", "success");
+          },
+        },
+      );
+
+      return items;
+    };
+
+    const render = async () => {
+      const shareItems = await buildShareItems();
+      this.ui.showBottomSheet({
+        isShare: true,
+        title: "Bagikan Tulisan",
+        subtitle: "Pilih cara membagikan tulisanmu (meow~)",
+        shareItems,
+      });
+    };
+
+    render();
   }
 
   /* --- Draft Tab Manager --- */
@@ -851,6 +978,15 @@ class App {
     const btnClose = document.getElementById("btn-close-sketch");
     if (btnClose) {
       btnClose.addEventListener("click", () => this._hideSketchModal());
+    }
+
+    // Mobile swipe-to-close: drag the modal card downward to dismiss.
+    const sketchCard = overlay.querySelector(".sketch-modal");
+    if (sketchCard) {
+      attachSwipeClose(sketchCard, {
+        axis: 'y',
+        onClose: () => this._hideSketchModal(),
+      });
     }
 
     // Click outside to close

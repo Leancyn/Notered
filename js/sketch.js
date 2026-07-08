@@ -9,6 +9,9 @@
 import { Storage } from "./storage.js";
 
 export class SketchSearch {
+  /** Default Unsplash API key (Client ID) — proyek pribadi */
+  static DEFAULT_UNSPLASH_KEY = "aS5uJ3zTxy5gr5IcIlnaJ-zFUIdvcHirXc-jvlLApPM";
+
   /**
    * @param {object} options
    * @param {function} options.onResults - Called with search results array
@@ -20,19 +23,31 @@ export class SketchSearch {
     this.onLoading = options.onLoading || (() => {});
     this.onError = options.onError || (() => {});
 
-    this._apiKey = "";
+    this._apiKey = SketchSearch.DEFAULT_UNSPLASH_KEY; // Default; bisa di-override dari settings
     this._worker = null;
     this._cache = new Map();
     this._sketchCache = new Map(); // Cache for sketch results: key = "url_blur_contrast"
 
     this._loadApiKey();
+    this._loadSource();
     this._initWorker();
   }
 
-  /** Load API key from storage */
+  /** Load API key from storage (settings key menimpa default) */
   _loadApiKey() {
     const settings = Storage.loadSettings();
-    this._apiKey = settings.apiKey || "aS5uJ3zTxy5gr5IcIlnaJ-zFUIdvcHirXc-jvlLApPM";
+    this._apiKey = settings.apiKey || SketchSearch.DEFAULT_UNSPLASH_KEY;
+  }
+
+  /** Load preferred search source from storage ("unsplash" | "wikimedia" | "openverse") */
+  _loadSource() {
+    const settings = Storage.loadSettings();
+    this._source = settings.searchSource || "unsplash";
+  }
+
+  /** Set the active search source */
+  setSource(source) {
+    this._source = source;
   }
 
   /** Initialize Web Worker for sketch processing */
@@ -96,10 +111,23 @@ export class SketchSearch {
     try {
       let results;
 
-      if (this._apiKey) {
-        results = await this._searchUnsplash(query, page, perPage);
-      } else {
-        results = await this._searchFallback(query, page, perPage);
+      switch (this._source) {
+        case "wikimedia":
+          results = await this._searchFallback(query, page, perPage);
+          break;
+        case "openverse":
+          results = await this._searchOpenverse(query, page, perPage);
+          break;
+        case "unsplash":
+        default:
+          if (this._apiKey) {
+            results = await this._searchUnsplash(query, page, perPage);
+          } else {
+            // Unsplash membutuhkan API key milik pengguna sendiri.
+            // Tanpa key, beri tahu pengguna alih-alih pencarian kosong.
+            throw new Error("Masukkan API Key Unsplash kamu di Pengaturan untuk menggunakan sumber ini.");
+          }
+          break;
       }
 
       this._cache.set(cacheKey, results);
@@ -107,7 +135,7 @@ export class SketchSearch {
       return results;
     } catch (err) {
       console.error("Sketch search error:", err);
-      this.onError("Miau! Gagal mencari gambar. Periksa koneksi internet ya.");
+      this.onError(err && err.message ? err.message : "Miau! Gagal mencari gambar. Periksa koneksi internet ya.");
       return [];
     } finally {
       this.onLoading(false);
@@ -149,6 +177,53 @@ export class SketchSearch {
       width: photo.width,
       height: photo.height,
     }));
+  }
+
+  /**
+   * Search via Openverse API (WordPress) — keyless, CORS-enabled.
+   * Docs: https://api.openverse.org/v1/images/
+   */
+  async _searchOpenverse(query, page, perPage) {
+    try {
+      const url = new URL("https://api.openverse.org/v1/images/");
+      url.searchParams.set("q", query);
+      url.searchParams.set("page", page);
+      url.searchParams.set("page_size", perPage);
+      url.searchParams.set("mature", "false");
+      url.searchParams.set("license_type", "all");
+
+      const res = await fetch(url.toString(), {
+        headers: { Accept: "application/json" },
+      });
+
+      if (!res.ok) throw new Error(`Openverse API error: ${res.status}`);
+
+      const data = await res.json();
+      const items = data.results || [];
+
+      if (items.length === 0) {
+        return this._getPlaceholderResults(query, page, perPage);
+      }
+
+      return items
+        .filter((item) => item.url && item.thumbnail)
+        .map((item) => ({
+          id: `openverse-${item.id}`,
+          thumb: item.thumbnail,
+          regular: item.url,
+          full: item.url,
+          alt: item.title || query,
+          author: item.creator || item.source || item.provider || "Openverse",
+          authorUrl: item.foreign_landing_url || item.url,
+          color: "#FFF8E7",
+          width: item.width || 800,
+          height: item.height || 800,
+          source: "openverse",
+        }));
+    } catch (err) {
+      console.warn("Openverse search failed, using placeholders:", err);
+      return this._getPlaceholderResults(query, page, perPage);
+    }
   }
 
   /**

@@ -42,9 +42,15 @@
   fill: var(--text-primary);
 }
 
-/* "For Mira" subtitle — hidden on mobile, shown on desktop */
+/* "For Mira" subtitle — shown on mobile (smaller) and desktop */
 .header-subtitle {
-  display: none;
+  display: inline;
+  font-weight: 600;
+  font-size: 0.6rem;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  margin-left: 2px;
+  white-space: nowrap;
 }
 
 @media (min-width: 768px) {
@@ -54,6 +60,41 @@
     font-size: 0.85rem;
     color: var(--text-secondary);
     margin-left: 2px;
+  }
+}
+
+/* Love / "for Mira" heart icon beside the logo text.
+   Sized smaller on mobile (like the rest of the mobile header),
+   scales up a touch on desktop to match the larger header. */
+.logo-text {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.header-heart {
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  fill: var(--cat-pink, #FFB5C2);
+  flex: 0 0 auto;
+  /* subtle heartbeat to match the cat theme */
+  animation: heart-beat 1.6s ease-in-out infinite;
+}
+
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  15%      { transform: scale(1.18); }
+  30%      { transform: scale(1); }
+  45%      { transform: scale(1.12); }
+  60%      { transform: scale(1); }
+}
+
+@media (min-width: 768px) {
+  .header-heart {
+    width: 18px;
+    height: 18px;
+    margin-left: 5px;
   }
 }
 
@@ -248,9 +289,17 @@
   background-color: var(--text-muted);
   border-radius: 99px;
   margin: 0 auto 16px auto;
+  /* Hint that the sheet can be dragged down to dismiss on touch devices */
+  cursor: grab;
 }
 
-.bottom-sheet-title {
+@media (pointer: coarse) {
+  .bottom-sheet-handle { cursor: grabbing; }
+  .sketch-modal-header { cursor: grab; }
+  .settings-header { cursor: grab; }
+}
+
+  .bottom-sheet-title {
   font-weight: 800;
   font-size: 1.15rem;
   color: var(--text-primary);
@@ -258,6 +307,69 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Share option list (Bagikan Tulisan bottom sheet) */
+.share-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.share-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-family: inherit;
+  transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+
+.share-option:hover {
+  background: var(--bg-tertiary);
+  box-shadow: 0 2px 10px var(--shadow);
+}
+
+.share-option:active {
+  transform: scale(0.98);
+}
+
+.share-option-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.share-option-label {
+  flex: 1;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.share-option-chevron {
+  width: 20px;
+  height: 20px;
+  fill: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+@media (min-width: 1024px) {
+  .share-option-list {
+    gap: 12px;
+  }
 }
 
 /* Toast System */

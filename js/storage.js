@@ -117,7 +117,8 @@ export class Storage {
       fontSize: 16,
       apiKey: '',
       theme: 'light',
-      autoCorrect: true
+      autoCorrect: true,
+      searchSource: 'unsplash'
     };
 
     if (!data) return defaults;
