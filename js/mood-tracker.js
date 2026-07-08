@@ -203,7 +203,9 @@ export class MoodTracker {
     const today = this._getTodayKey();
     const streak = this._loadStreak();
     if (streak.lastDate === today) return;
-    const yesterday = this._formatDateKey(new Date(Date.now() - 86400000));
+    const yDate = new Date();
+    yDate.setDate(yDate.getDate() - 1);
+    const yesterday = this._formatDateKey(yDate);
     if (streak.lastDate === yesterday) streak.count += 1;
     else if (streak.lastDate !== today) streak.count = 1;
     streak.lastDate = today;

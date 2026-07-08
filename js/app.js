@@ -426,12 +426,29 @@ class App {
         const idx = parseInt(btn.dataset.moodIndex);
         this.moodTracker.setMood(idx);
 
-        // Optimize: just update active states instead of full re-render
+        const moods = MoodTracker.getMoodOptions();
+        const mood = moods[idx];
+
+        // Update active states and clear stale inline styles from any
+        // previously selected button (inline border/background beat the
+        // .active class, so they must be reset to let CSS take over).
         container.querySelectorAll(".mood-btn").forEach((b, i) => {
-          b.classList.toggle("active", i === idx);
+          if (i === idx) {
+            b.classList.add("active");
+            b.style.borderColor = mood.color;
+            b.style.background = mood.bg;
+          } else {
+            b.classList.remove("active");
+            b.style.borderColor = "";
+            b.style.background = "";
+          }
         });
 
-        this.ui.showToast(`Mood hari ini: ${MoodTracker.getMoodOptions()[idx].label}`, "success");
+        // Streak may have become > 0 on first pick — show/update the badge
+        // without a full re-render by re-rendering just the mood panel.
+        this._renderMoodPanel();
+
+        this.ui.showToast(`Mood hari ini: ${mood.label}`, "success");
       });
     });
 

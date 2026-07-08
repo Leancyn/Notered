@@ -6,39 +6,39 @@
  */
 
 /* Import Nunito Font from Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap");
 
 :root {
   /* Colors - Warm Yellow Eye-Friendly Palette */
-  --bg-primary: #FFFDF5;
-  --bg-secondary: #FFF8E7;
-  --bg-tertiary: #FFF3D6;
+  --bg-primary: #fffdf5;
+  --bg-secondary: #fff8e7;
+  --bg-tertiary: #fff3d6;
   --bg-glass: rgba(255, 248, 220, 0.65);
-  --accent: #F5C542;
-  --accent-hover: #E8A838;
-  --accent-soft: #FDEAB0;
-  --accent-peach: #F5D0A9;
-  
+  --accent: #f5c542;
+  --accent-hover: #e8a838;
+  --accent-soft: #fdeab0;
+  --accent-peach: #f5d0a9;
+
   /* Text Colors */
-  --text-primary: #3D2E1C;
-  --text-secondary: #8A7A66;
-  --text-muted: #B5A68E;
-  
+  --text-primary: #3d2e1c;
+  --text-secondary: #8a7a66;
+  --text-muted: #b5a68e;
+
   /* Status Colors */
-  --error: #E07070;
+  --error: #e07070;
   --error-bg: rgba(224, 112, 112, 0.1);
-  --success: #6DBF73;
-  --warning: #F0A050;
-  
+  --success: #6dbf73;
+  --warning: #f0a050;
+
   /* Cat Accents */
-  --cat-pink: #FFB5C2;
-  --cat-cream: #F2A65A;
-  
+  --cat-pink: #ffb5c2;
+  --cat-cream: #f2a65a;
+
   /* Borders & Shadows */
   --border: rgba(139, 109, 56, 0.12);
   --shadow: rgba(139, 109, 56, 0.08);
   --shadow-lg: rgba(139, 109, 56, 0.15);
-  
+
   /* Layout Tokens */
   --header-height-mobile: 56px;
   --header-height-desktop: 64px;
@@ -46,19 +46,31 @@
 }
 
 /* Minimal Modern Reset */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   width: 100%;
   overflow-x: hidden;
+  /* Disable native pull-to-refresh / overscroll glow so swipe-to-close
+     gestures on modals don't trigger a page refresh on mobile. */
+  overscroll-behavior-y: none;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    "Nunito",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -66,13 +78,15 @@ html, body {
 }
 
 @media (min-width: 768px) {
-  html, body {
+  html,
+  body {
     font-size: 17px;
   }
 }
 
 @media (min-width: 1024px) {
-  html, body {
+  html,
+  body {
     font-size: 18px;
   }
 }
@@ -103,7 +117,13 @@ html, body {
 }
 
 /* Touch friendly configuration */
-a, button, input, select, textarea, [role="button"], [contenteditable] {
+a,
+button,
+input,
+select,
+textarea,
+[role="button"],
+[contenteditable] {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
@@ -191,7 +211,7 @@ a, button, input, select, textarea, [role="button"], [contenteditable] {
   .loading-text-main {
     font-size: 1rem;
   }
-  
+
   .loading-text-sub {
     font-size: 0.8rem;
   }

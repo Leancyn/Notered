@@ -10,13 +10,23 @@
  * overflow auto/scroll that actually has content to scroll). Used to avoid
  * hijacking native scrolling when the user swipes inside a scroll area.
  */
-function findScrollable(node) {
+function findScrollable(node, axis) {
   let el = node;
   while (el && el !== document.body) {
     const style = getComputedStyle(el);
-    const oy = style.overflowY || style.overflow;
-    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
-      return el;
+    if (axis === 'x') {
+      // Only block horizontal swipe-close if ancestor truly scrolls
+      // horizontally. A vertically-scrollable panel must NOT block the
+      // horizontal drag-to-dismiss gesture.
+      const ox = style.overflowX || style.overflow;
+      if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth) {
+        return el;
+      }
+    } else {
+      const oy = style.overflowY || style.overflow;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
     }
     el = el.parentElement;
   }
@@ -33,76 +43,93 @@ function findScrollable(node) {
  */
 export function attachSwipeClose(panel, opts) {
   if (!panel || panel.dataset.swipeBound) {
-    if (panel) panel.dataset.swipeBound = 'true';
+    if (panel) panel.dataset.swipeBound = "true";
     return;
   }
-  panel.dataset.swipeBound = 'true';
+  panel.dataset.swipeBound = "true";
 
-  const axis = opts.axis || 'y';
-  let startX = 0, startY = 0, dragging = false, moved = 0, scrollable = null;
+  const axis = opts.axis || "y";
+  let startX = 0,
+    startY = 0,
+    dragging = false,
+    moved = 0,
+    scrollable = null;
 
-  const base = () => (opts.getBaseTransform ? opts.getBaseTransform() : '');
+  const base = () => (opts.getBaseTransform ? opts.getBaseTransform() : "");
 
-  panel.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    // Don't hijack touches that start on interactive controls (sliders,
-    // buttons, links, inputs).
-    if (e.target.closest('input, button, a, textarea, select')) return;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    dragging = true;
-    moved = 0;
-    scrollable = findScrollable(e.target);
-    panel.style.transition = 'none';
-  }, { passive: true });
+  panel.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length !== 1) return;
+      // Don't hijack touches that start on interactive controls (sliders,
+      // buttons, links, inputs).
+      if (e.target.closest("input, button, a, textarea, select")) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      dragging = true;
+      moved = 0;
+      scrollable = findScrollable(e.target, axis);
+      panel.style.transition = "none";
+    },
+    { passive: true },
+  );
 
-  panel.addEventListener('touchmove', (e) => {
-    if (!dragging || scrollable) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-    // Lock to the requested axis and only the "closing" direction.
-    if (axis === 'y') {
-      const d = Math.max(0, dy);
-      moved = d;
-      panel.style.transform = `${base()} translateY(${d}px)`;
-    } else {
-      const d = Math.max(0, dx);
-      moved = d;
-      panel.style.transform = `${base()} translateX(${d}px)`;
-    }
-  }, { passive: true });
+  panel.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!dragging || scrollable) return;
+      // Prevent the browser's native pull-to-refresh / overscroll glow while
+      // we are actively dragging the panel closed.
+      if (e.cancelable) e.preventDefault();
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      // Lock to the requested axis and only the "closing" direction.
+      if (axis === "y") {
+        const d = Math.max(0, dy);
+        moved = d;
+        panel.style.transform = `${base()} translateY(${d}px)`;
+      } else {
+        const d = Math.max(0, dx);
+        moved = d;
+        panel.style.transform = `${base()} translateX(${d}px)`;
+      }
+    },
+    { passive: false },
+  );
 
   const end = () => {
     if (!dragging) return;
     dragging = false;
     scrollable = null;
-    panel.style.transition = 'transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94)';
+    panel.style.transition = "transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94)";
 
     if (moved > 80) {
       // Animate fully off-screen, then call the close handler.
-      if (axis === 'y') panel.style.transform = `${base()} translateY(100%)`;
+      if (axis === "y") panel.style.transform = `${base()} translateY(100%)`;
       else panel.style.transform = `${base()} translateX(100%)`;
 
       let done = false;
       const finish = () => {
         if (done) return;
         done = true;
-        panel.removeEventListener('transitionend', finish);
-        panel.style.transition = '';
-        panel.style.transform = '';
+        panel.removeEventListener("transitionend", finish);
+        panel.style.transition = "";
+        panel.style.transform = "";
         opts.onClose && opts.onClose();
       };
-      panel.addEventListener('transitionend', finish);
+      panel.addEventListener("transitionend", finish);
       setTimeout(finish, 320);
     } else {
       // Snap back to open position.
-      panel.style.transform = '';
-      setTimeout(() => { panel.style.transition = ''; }, 260);
+      panel.style.transform = "";
+      setTimeout(() => {
+        panel.style.transition = "";
+      }, 260);
     }
   };
 
-  panel.addEventListener('touchend', end);
-  panel.addEventListener('touchcancel', end);
+  panel.addEventListener("touchend", end);
+  panel.addEventListener("touchcancel", end);
 }
 
 export class UI {
@@ -144,24 +171,24 @@ export class UI {
     // Bottom sheet: drag down to dismiss (accounts for desktop centering).
     if (this._bottomSheet) {
       attachSwipeClose(this._bottomSheet, {
-        axis: 'y',
+        axis: "y",
         onClose: () => this.hideBottomSheet(),
         getBaseTransform: () => {
           const cs = getComputedStyle(this._bottomSheet);
           // On wide screens the active sheet is centered with translate(-50%, -20px)
-          if (window.matchMedia('(min-width: 1024px)').matches) return 'translate(-50%, -20px)';
-          return 'translateY(0)';
+          if (window.matchMedia("(min-width: 1024px)").matches) return "translate(-50%, -20px)";
+          return "translateY(0)";
         },
       });
     }
     // Settings panel: drag right to dismiss.
     if (this._settingsPanel) {
       attachSwipeClose(this._settingsPanel, {
-        axis: 'x',
+        axis: "x",
         onClose: () => this.hideSettings(),
         getBaseTransform: () => {
-          if (window.matchMedia('(min-width: 1024px)').matches) return 'translate(-50%, -50%) scale(1)';
-          return 'translateX(0)';
+          if (window.matchMedia("(min-width: 1024px)").matches) return "translate(-50%, -50%) scale(1)";
+          return "translateX(0)";
         },
       });
     }
