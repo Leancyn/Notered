@@ -1462,7 +1462,7 @@ class App {
 
       <div class="challenge-motivation-card">
         <div class="challenge-motivation-text">"${motivationMsg}"</div>
-        <div class="challenge-motivation-cat">– Mia the Cat ${CAT_ICON_SVG}</div>
+        <div class="challenge-motivation-cat">– Miaw the Cat ${CAT_ICON_SVG}</div>
       </div>
     `;
 
