@@ -3,7 +3,8 @@
  *
  * Coordinates dictionary loadings, sets up spell checkers, editor managers,
  * sketch modules, and handles DOM bindings and screen switching.
- * Extended with Mood Tracker, Journal Prompts, Theme Picker & Affirmations.
+ * Extended with Mood Tracker, Journal Prompts, Theme Picker & Affirmations,
+ * and Random Challenge Feature.
  */
 
 import { UI, attachSwipeClose } from "./ui.js";
@@ -15,6 +16,7 @@ import { Storage } from "./storage.js";
 import { Export } from "./export.js";
 import { KbbiApi } from "./kbbi-api.js";
 import { MoodTracker } from "./mood-tracker.js";
+import { ChallengeManager, getChallengeManager, CAT_ICON_SVG, ICONS_START, ICONS_COMPLETE, ICONS_WRITE, ICONS_DRAW, ICONS_NEXT } from "./challenge.js";
 import { kbbiParser } from "./kbbi-parser.js";
 import { kbbiValidator } from "./kbbi-validator.js";
 
@@ -26,6 +28,7 @@ class App {
     this.editor = null;
     this.sketch = null;
     this.moodTracker = null;
+    this.challengeManager = null;
 
     this._appLoadingScreen = null;
     this._init();
@@ -38,24 +41,27 @@ class App {
     // 0. Initialize Mood Tracker (for journal prompts, affirmations, streak)
     this.moodTracker = new MoodTracker();
 
+    // 1. Initialize Challenge Manager
+    this.challengeManager = getChallengeManager();
+
     // Cache settings to avoid repeated localStorage reads
     this._cachedSettings = Storage.loadSettings();
 
-    // 1. Initialize Dictionary & Spellcheck
+    // 2. Initialize Dictionary & Spellcheck
     this.dictionary = new Dictionary();
     await this.dictionary.load();
 
     this.spellChecker = new SpellChecker(this.dictionary);
     await this.spellChecker.init();
 
-    // 2. Initialize Sketch Search Module
+    // 3. Initialize Sketch Search Module
     this.sketch = new SketchSearch({
       onResults: (results) => this._renderSketchResults(results),
       onLoading: (isLoading) => this._toggleSketchLoading(isLoading),
       onError: (msg) => this.ui.showToast(msg, "error"),
     });
 
-    // 3. Initialize Text Editor
+    // 4. Initialize Text Editor
     const editorEl = document.getElementById("editor-area");
     this.editor = new Editor(editorEl, this.spellChecker, {
       onStatsUpdate: (stats) => this._updateStatsUI(stats),
@@ -64,19 +70,19 @@ class App {
       onMascotUpdate: (mood) => this._updateMascotMood(mood),
     });
 
-    // 4. Setup Event Listeners
+    // 5. Setup Event Listeners
     this._bindEvents();
 
-    // 5. Restore active draft or load sample content
+    // 6. Restore active draft or load sample content
     this._restoreActiveDraft();
 
-    // 6. Initialize Mood tab content
+    // 7. Initialize Mood tab content
     this._renderMoodPanel();
 
-    // 7. Apply saved theme (use cached settings)
+    // 8. Apply saved theme (use cached settings)
     this._applyTheme(this._cachedSettings.theme || "light");
 
-    // 8. Hide loading screen
+    // 9. Hide loading screen
     if (this._appLoadingScreen) {
       this._appLoadingScreen.style.opacity = "0";
       setTimeout(() => {
@@ -97,6 +103,8 @@ class App {
           this._renderDraftsList();
         } else if (tabName === "mood") {
           this._renderMoodPanel();
+        } else if (tabName === "challenge") {
+          this._renderChallengePanel();
         }
       });
     });
@@ -732,7 +740,7 @@ class App {
     }
 
     // Match "Lihat", "Lihat:", "lihat" followed by the target word.
-    const m = defText.match(/^\s*lihat\s*:?\s*([\p{L}\p{M}.·'-]+(?:\s[\p{L}\p{M}.·'-]+)?)/ui);
+    const m = defText.match(/^\s*lihat\s*:?\s*([\p{L}\p{M}.·'-]+(?:\s[\p{L}\p{M}.·'-]+)?)/iu);
     if (!m) return defText;
 
     const target = m[1].trim().toLowerCase();
@@ -1036,7 +1044,7 @@ class App {
     const sketchCard = overlay.querySelector(".sketch-modal");
     if (sketchCard) {
       attachSwipeClose(sketchCard, {
-        axis: 'y',
+        axis: "y",
         onClose: () => this._hideSketchModal(),
       });
     }
@@ -1289,7 +1297,9 @@ class App {
     if (overlay) overlay.classList.remove("active");
   }
 
+  /** Escape HTML special characters (prevents XSS) */
   _escapeHtml(str) {
+    if (typeof str !== "string") return "";
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
@@ -1328,14 +1338,174 @@ class App {
       })
       .join("");
   }
-}
 
-// Shared escapeHtml utility to avoid duplicate implementations
-function escapeHtml(str) {
-  if (typeof str !== "string") return "";
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+  /* --- Challenge Panel Renderer --- */
+
+  _renderChallengePanel() {
+    const container = document.getElementById("challenge-container");
+    if (!container) return;
+
+    const completedCount = this.challengeManager.getCompletedCount();
+    const todayCompleted = this.challengeManager.isTodayCompleted();
+    const todayChallenge = this.challengeManager.getTodaysChallenge();
+    const motivationMsg = ChallengeManager.getMotivationalMessage();
+    const encouragementMsg = ChallengeManager.getEncouragementMessage();
+    const categories = ChallengeManager.getCategories();
+
+    container.innerHTML = `
+      <div class="challenge-header">
+        <div class="challenge-title">
+          Tantangan Menulis
+        </div>
+        <div class="challenge-subtitle">${encouragementMsg}</div>
+      </div>
+
+      <div class="challenge-stats">
+        <div class="challenge-stat-item">
+          <div class="challenge-stat-number">${completedCount}</div>
+          <div class="challenge-stat-label">Selesai</div>
+        </div>
+        <div class="challenge-stat-item">
+          <div class="challenge-stat-number">${todayCompleted ? "✓" : "○"}</div>
+          <div class="challenge-stat-label">Hari Ini</div>
+        </div>
+      </div>
+
+      <div class="challenge-chat-wrapper" id="challenge-chat-wrapper">
+        <div class="challenge-cat-mascot">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <g class="animate-float">
+              <!-- Tail (curved behind) -->
+              <path d="M 72 78 Q 90 78 88 58 Q 86 48 80 50" fill="none" stroke="#F2A65A" stroke-width="5" stroke-linecap="round" class="animate-tail-sweep"/>
+              
+              <!-- Body (chubby) -->
+              <ellipse cx="50" cy="82" rx="20" ry="14" fill="#F2A65A"/>
+              <ellipse cx="50" cy="84" rx="12" ry="8" fill="#FDEAB0" opacity="0.5"/>
+              
+              <!-- Head (big, round) -->
+              <circle cx="50" cy="50" r="28" fill="#F2A65A"/>
+              
+              <!-- Ears (rounded, cute) -->
+              <g class="animate-ear-twitch" style="transform-origin: 28px 28px;">
+                <path d="M 24 32 L 18 10 L 38 24 Z" fill="#F2A65A" stroke="#F2A65A" stroke-width="1" stroke-linejoin="round"/>
+                <path d="M 26 30 L 22 16 L 35 25 Z" fill="#FFB5C2"/>
+              </g>
+              <g class="animate-ear-twitch" style="transform-origin: 72px 28px; animation-delay: -3.5s;">
+                <path d="M 76 32 L 82 10 L 62 24 Z" fill="#F2A65A" stroke="#F2A65A" stroke-width="1" stroke-linejoin="round"/>
+                <path d="M 74 30 L 78 16 L 65 25 Z" fill="#FFB5C2"/>
+              </g>
+              
+              <!-- Blush (cute pink cheeks) -->
+              <ellipse cx="33" cy="57" rx="6" ry="3.5" fill="#FFB5C2" opacity="0.4"/>
+              <ellipse cx="67" cy="57" rx="6" ry="3.5" fill="#FFB5C2" opacity="0.4"/>
+              
+              <!-- Eyes (big, round, sparkly) -->
+              <ellipse cx="39" cy="49" rx="5.5" ry="6.5" fill="#3D2E1C"/>
+              <ellipse cx="37.5" cy="47" rx="2.2" ry="2.8" fill="#fff"/>
+              <ellipse cx="61" cy="49" rx="5.5" ry="6.5" fill="#3D2E1C"/>
+              <ellipse cx="59.5" cy="47" rx="2.2" ry="2.8" fill="#fff"/>
+              
+              <!-- Nose (tiny pink triangle) -->
+              <polygon points="48.5,56 51.5,56 50,58.5" fill="#FFB5C2"/>
+              
+              <!-- Mouth (cute 'w' shape) -->
+              <path d="M 45.5 60 Q 48 63 50 60 Q 52 63 54.5 60" fill="none" stroke="#3D2E1C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              
+              <!-- Whiskers -->
+              <line x1="18" y1="54" x2="33" y2="56" stroke="#3D2E1C" stroke-width="0.8" opacity="0.3"/>
+              <line x1="18" y1="58" x2="33" y2="58" stroke="#3D2E1C" stroke-width="0.8" opacity="0.3"/>
+              <line x1="67" y1="56" x2="82" y2="54" stroke="#3D2E1C" stroke-width="0.8" opacity="0.3"/>
+              <line x1="67" y1="58" x2="82" y2="58" stroke="#3D2E1C" stroke-width="0.8" opacity="0.3"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="challenge-bubble" id="challenge-bubble">
+          <div class="challenge-bubble-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Tantangan Hari Ini
+            <span class="challenge-bubble-category">${todayChallenge.category} ${todayChallenge.icon}</span>
+          </div>
+          <div class="challenge-bubble-text">${this._escapeHtml(todayChallenge.text)}</div>
+        </div>
+      </div>
+
+      ${
+        todayCompleted
+          ? `<div class="challenge-post-completion">
+            <div class="challenge-completed-badge">
+              ${ICONS_COMPLETE}
+              Kamu sudah menyelesaikan tantangan hari ini! Keren banget!
+            </div>
+            <div class="challenge-actions challenge-post-actions">
+              <button class="challenge-btn challenge-btn-primary" id="btn-write-challenge">
+                ${ICONS_WRITE}
+                Menulis
+              </button>
+              <button class="challenge-btn challenge-btn-secondary" id="btn-draw-challenge">
+                ${ICONS_DRAW}
+                Menggambar
+              </button>
+            </div>
+          </div>`
+          : `<div class="challenge-actions">
+            <button class="challenge-btn challenge-btn-primary" id="btn-start-challenge">
+              ${ICONS_START}
+              Mulai Menulis
+            </button>
+            <button class="challenge-btn challenge-btn-secondary" id="btn-new-challenge">
+              ${ICONS_NEXT}
+              Tantangan Baru
+            </button>
+          </div>`
+      }
+
+      <div class="challenge-motivation-card">
+        <div class="challenge-motivation-text">"${motivationMsg}"</div>
+        <div class="challenge-motivation-cat">– Mia the Cat ${CAT_ICON_SVG}</div>
+      </div>
+    `;
+
+    // Bind button events
+    const btnStart = document.getElementById("btn-start-challenge");
+    if (btnStart) {
+      btnStart.addEventListener("click", () => {
+        this.editor.setContent(todayChallenge.text + "\n\n");
+        this.challengeManager.completeChallenge();
+        this.ui.switchTab("tulis");
+        this.ui.showToast("Tantangan siap ditulis! Ayo mulai!", "info");
+      });
+    }
+
+    const btnWriteChallenge = document.getElementById("btn-write-challenge");
+    if (btnWriteChallenge) {
+      btnWriteChallenge.addEventListener("click", () => {
+        this.editor.setContent(todayChallenge.text + "\n\n");
+        this.ui.switchTab("tulis");
+        this.ui.showToast("Ayo tulis tantanganmu! Meeow~", "info");
+      });
+    }
+
+    const btnDrawChallenge = document.getElementById("btn-draw-challenge");
+    if (btnDrawChallenge) {
+      btnDrawChallenge.addEventListener("click", () => {
+        this.ui.switchTab("sketsa");
+        this.ui.showToast("Cari referensi gambar untuk tantangan ini! Meeow~", "info");
+      });
+    }
+
+    const btnNew = document.getElementById("btn-new-challenge");
+    if (btnNew) {
+      btnNew.addEventListener("click", () => {
+        const newChallenge = this.challengeManager.getRandomChallenge();
+        this._renderChallengePanel();
+        this.editor.setContent(newChallenge.text + "\n\n");
+        this.ui.switchTab("tulis");
+        this.ui.showToast("Tantangan baru! Kamu pasti bisa!", "success");
+        this._updateMascotMood("happy");
+      });
+    }
+  }
 }
 
 // Boot application when DOM is ready

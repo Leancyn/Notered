@@ -1,20 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Analisis Kebiasaan Bahasa Indonesia untuk Notered
 
 ## Ringkasan
