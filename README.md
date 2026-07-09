@@ -2,17 +2,17 @@
 
 <div align="center">
 
-### Tumpukan Teknologi
+### Dibuat Khusus untuk Mira
 
-![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
-![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
-![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
-![IndexedDB](https://img.shields.io/badge/IndexedDB-3185FC?style=for-the-badge&logo=indexeddb&logoColor=white)
-![Canvas API](https://img.shields.io/badge/Canvas_API-FF6B6B?style=for-the-badge&logo=html5&logoColor=white)
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://html5.org/)
+[![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)](https://www.w3.org/Style/CSS/)
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://www.javascript.com/)
+[![IndexedDB](https://img.shields.io/badge/IndexedDB-3185FC?style=for-the-badge&logo=indexeddb&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+[![Canvas API](https://img.shields.io/badge/Canvas_API-FF6B6B?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
 
 </div>
 
-Aplikasi penulisan dengan koreksi ejaan, referensi sketsa, dan pelacak suasana hati, dibuat dengan penuh cinta untuk Mira.
+> Aplikasi penulisan dengan koreksi ejaan, referensi sketsa, dan pelacak suasana hati, **dibuat dengan penuh cinta untuk Mira**.
 
 ## Tentang
 
@@ -30,13 +30,6 @@ Notered adalah editor teks yang dirancang untuk pencinta bahasa Indonesia. Aplik
 - **Draft Management** untuk menyimpan, memuat, dan menghapus dokumen melalui IndexedDB dan localStorage.
 - **Mascot Kucing Interaktif** dengan animasi idle (breathe, blink, tail sweep, ear twitch, paw shuffle) dan perubahan ekspresi mood (senang, khawatir, netral).
 
-## Data KBBI
-
-- **85.039 entri kata** dengan tag part-of-speech dan definisi terformat dari Kamus Besar Bahasa Indonesia resmi.
-- **876 mapping typo/kata tidak baku** (contoh: "mnulis" -> "menulis", "nggak" -> "tidak") untuk koreksi otomatis.
-- Definisi divalidasi, diformat, dan direferensikan silang (contoh: "Lihat enyah" mengarah ke definisi asli kata "enyah") melalui modul kbbi-validator dan kbbi-parser.
-- Fallback pencarian KBBI API jika kata tidak ditemukan di dataset lokal.
-
 ## Tumpukan Teknologi
 
 - **Bahasa:** Vanilla JavaScript (ES Modules)
@@ -50,6 +43,13 @@ Notered adalah editor teks yang dirancang untuk pencinta bahasa Indonesia. Aplik
 - **PWA:** Meta tag mobile-web-app-capable, dukungan safe-area-inset, kontrol overscroll-behavior
 - **Aksesibilitas:** Label ARIA, outline focus-visible, touch-action manipulation, media query reduced-motion
 
+## Data KBBI
+
+- **85.039 entri kata** dengan tag part-of-speech dan definisi terformat dari Kamus Besar Bahasa Indonesia resmi.
+- **876 mapping typo/kata tidak baku** (contoh: "mnulis" -> "menulis", "nggak" -> "tidak") untuk koreksi otomatis.
+- Definisi divalidasi, diformat, dan direferensikan silang (contoh: "Lihat enyah" mengarah ke definisi asli kata "enyah") melalui modul kbbi-validator dan kbbi-parser.
+- Fallback pencarian KBBI API jika kata tidak ditemukan di dataset lokal.
+
 ## Penggunaan
 
 Buka `index.html` di browser untuk mulai menulis. Editor memuat teks contoh yang mendemonstrasikan fitur pemeriksaan ejaan. Klik kata yang digaris bawahi untuk melihat saran dan definisi KBBI.
@@ -59,7 +59,3 @@ Ketuk tab di bagian bawah untuk berpindah antar Editor, Referensi Sketsa, Draft,
 ## Detail Teknis
 
 Dibangun sebagai single-page application menggunakan vanilla JavaScript (ES modules) tanpa framework dependencies. Semua data kamus dimuat client-side dari JSON dengan lazy parsing untuk performa. Konversi sketsa menggunakan edge detection berbasis canvas dengan parameter blur (2-30) dan kontras (0-50) yang dapat dikonfigurasi. Draft disimpan otomatis saat idle dan bertahan antar sesi.
-
-## Dibuat untuk Mira
-
-Aplikasi ini diciptakan sebagai hadiah personal, menggabungkan alat menulis dengan interaksi bertema kucing yang menggemaskan dan desain feminine yang penuh perhatian.
