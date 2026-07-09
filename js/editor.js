@@ -70,12 +70,21 @@ export class Editor {
       this._onInput(e);
     });
 
-    // ── Paste: strip formatting
+    // ── Paste: strip formatting, normalize line endings, prevent extra spacing
     this.el.addEventListener('paste', (e) => {
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-      // Use modern insertText if available, fall back to execCommand
-      if (!document.execCommand('insertText', false, text)) {
+      let text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      // Normalize all line endings to \n first
+      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      // Collapse runs of 2+ newlines into exactly 2 (single blank line).
+      // This prevents triple+ blank lines while preserving paragraph breaks.
+      text = text.replace(/\n{2,}/g, '\n\n');
+      
+      // For multi-paragraph paste (2+ newlines), use manual text node insertion
+      // to avoid browser quirks with newline handling in execCommand('insertText').
+      // Single-line and single-newline paste can use execCommand for better
+      // performance and native behavior.
+      if (text.includes('\n\n')) {
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0) {
           const range = sel.getRangeAt(0);
@@ -85,6 +94,9 @@ export class Editor {
           sel.removeAllRanges();
           sel.addRange(range);
         }
+      } else {
+        // Single line or single newline: use execCommand for efficiency
+        document.execCommand('insertText', false, text);
       }
     });
 
@@ -158,6 +170,49 @@ export class Editor {
     this._debounceTimer = setTimeout(() => {
       this._processText();
     }, 800);
+  }
+
+  /**
+   * Check if a word is inside dialogue context.
+   * Scans backwards to see if we're inside quotes.
+   */
+  _isInDialogueContext(wordSpan) {
+    if (!wordSpan || !wordSpan.parentNode) return false;
+    
+    const walker = document.createTreeWalker(
+      wordSpan.parentNode,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+      null,
+      false
+    );
+    
+    let node = walker.currentNode;
+    let openQuotes = 0;
+    const dialogueMarkers = ['"', "'", '"', "'", '—', '-'];
+    
+    while (node && node !== wordSpan) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent;
+        // Count opening/closing quotes
+        for (const char of text) {
+          if (dialogueMarkers.includes(char)) {
+            if (char === '—' || char === '-') {
+              openQuotes++;
+            } else {
+              openQuotes++;
+            }
+          }
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        // Check if this element is inside a dialogue structure
+        if (node.closest?.('.dialogue-quote, blockquote')) {
+          return true;
+        }
+      }
+      node = walker.nextNode();
+    }
+    
+    return openQuotes % 2 !== 0; // Odd number of quotes = inside dialogue
   }
 
   // ── Auto-correct: previous word in text node ──────────────────────────────
@@ -315,14 +370,28 @@ export class Editor {
     let errorCount   = 0;
     let warningCount = 0;
 
+    // Remove ONLY trailing empty lines at the very end of the document
+    // This prevents extra visual spacing at the end when content is rebuilt
+    // but preserves blank lines that separate paragraphs
+    while (lines.length > 1 && lines[lines.length - 1].trim() === '') {
+      lines.pop();
+    }
+    // Also handle the case where the entire content is just whitespace/newlines
+    if (lines.length === 1 && lines[0].trim() === '') {
+      lines.length = 0;
+    }
+
     for (let li = 0; li < lines.length; li++) {
-      if (li > 0) html += '<br>';
+      // Add line separator before this line (if not the first line)
+      // This <br> represents the newline character that separates lines
+      if (li > 0) {
+        html += '<br>';
+      }
       const line = lines[li];
 
       if (line.trim() === '') {
         // Blank line: the joining <br> added above already represents the
-        // newline. Adding another <br> here would desync the caret offset
-        // (saved plain-text counts 1 newline, rebuilt HTML would have 2).
+        // newline. Adding another <br> here would create a double newline.
         continue;
       }
 

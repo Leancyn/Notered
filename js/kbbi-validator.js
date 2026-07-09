@@ -101,18 +101,22 @@ export class KbbiValidator {
       }
     }
     
-    // Manual HTML entity decoding (fallback for non-browser environments).
-    // Patterns are built via string concatenation to avoid the source itself
-    // being interpreted as HTML entities. Decode & LAST so already-decoded
-    // entities are not re-processed.
+    // Enhanced HTML entity decoding for comprehensive KBBI data support
+    // Handles named entities, numeric entities, and hex entities
     const e = '&';
     return str
+      // Decode common named entities (order matters - decode & LAST)
+      .replace(new RegExp(e + 'nbsp;', 'g'), ' ')
       .replace(new RegExp(e + 'lt;', 'g'), '<')
       .replace(new RegExp(e + 'gt;', 'g'), '>')
       .replace(new RegExp(e + 'quot;', 'g'), '"')
+      .replace(new RegExp(e + 'apos;', 'g'), "'")
       .replace(new RegExp(e + '#39;', 'g'), "'")
-      .replace(new RegExp(e + 'nbsp;', 'g'), ' ')
-      .replace(new RegExp(e + 'amp;', 'g'), '&');
+      .replace(new RegExp(e + 'amp;', 'g'), '&')
+      // Decode numeric entities: &#123; (decimal)
+      .replace(/#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+      // Decode hex entities: &#xAB;
+      .replace(/#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
   }
 
   /**

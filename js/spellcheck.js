@@ -23,6 +23,38 @@ import { TIDAK_BAKU_MAP, TYPO_MAP, checkCommonTypos, getCommonTypoMap } from './
 import { levenshteinDistance, damerauLevenshteinDistance } from './edit-distance.js';
 
 // ---------------------------------------------------------------------------
+// Proper Nouns / Character Names Whitelist
+// Common Indonesian names and Wattpad-style character names
+// ---------------------------------------------------------------------------
+const PROPER_NOUNS = new Set([
+  // Common Indonesian first names
+  'Nara', 'Raka', 'Arya', 'Dimas', 'Rizky', 'Dita', 'Mira', 'Sari', 'Budi',
+  'Dewi', 'Putri', 'Putra', 'Andi', 'Doni', 'Rani', 'Ani', 'Siti', 'Nur',
+  'Ahmad', 'Muhammad', 'Fatih', 'Zahra', 'Amira', 'Kiran', 'Adrian', 'Rafael',
+  'Nathan', 'Justin', 'Kevin', 'Steven', 'Grace', 'Sofia', 'Olivia', 'Emily',
+  'Sarah', 'Jessica', 'Michelle', 'Jennifer', 'Amanda', 'Stephanie', 'Regina',
+  
+  // Surnames / family names
+  'Wijaya', 'Kusuma', 'Pratama', 'Putri', 'Putra', 'Sari', 'Harta', 'Budiman',
+  
+  // Fantasy / Wattpad-style names
+  'Axel', 'Raven', 'Jax', 'Sky', 'Storm', 'Blake', 'Drake', 'Rex', 'Zane',
+  'Kai', 'Luna', 'Aurora', 'Stella', 'Iris', 'Nova', 'Athena', 'Freya',
+  'Loki', 'Thor', 'Zeus', 'Apollo', 'Orion', 'Phoenix', 'Draco', 'Lycan',
+]);
+
+// ---------------------------------------------------------------------------
+// Dialogue markers and punctuation patterns
+// ---------------------------------------------------------------------------
+const DIALOGUE_PATTERNS = [
+  /^[""''"].+[""''"]$/,      // Quoted dialogue
+  /^[""''"].+$/,             // Opening quote only
+  /^.+"[""'']{0,2}$/,        // Closing quote only
+  /^—.+$/,                   // Em dash dialogue
+  /^- .+$/,                  // Hyphen dialogue
+];
+
+// ---------------------------------------------------------------------------
 // Whitelist — tokens that are always correct (skip spell check entirely)
 // ---------------------------------------------------------------------------
 const WHITELIST = new Set([
@@ -55,6 +87,70 @@ const WHITELIST = new Set([
 
   // App-specific
   'notered', 'kbbi',
+
+  // Literary / novel words (common in fiction/poetry)
+  'temaram', 'lirih', 'bisik', 'rintih', 'senggut', 'rindu', 'keroncong',
+  'gumam', 'sarang', 'titisan', 'sendi', 'guratan', 'ratapan', 'sabda',
+  'pesona', 'suka', 'cipta', 'syukur', 'tamia', 'kala', 'senja', 'merona',
+  
+  // Wattpad-specific slang and expressions
+  'nyesel', 'capek', 'cape', 'ngga', 'nggak', 'gak', 'ga', 'tnya', 'nya',
+  'nya deh', 'lah', 'loh', 'nih', 'tuh', 'gih', 'cuy', 'bro', 'sis', 'gas',
+  'baper', 'baperan', 'nolep', 'kepo', 'baper', 'sange', 'jomblo', 'fwb',
+  'ghosting', 'breadcrumbing', 'benching', 'orbiting', 'curhat', 'galau',
+  'bete', 'selby', 'stres', 'deadline', 'mager', 'malas', 'males', 'woles',
+  'keep smile', 'stay strong', 'fight', 'semangat', 'ayo', 'yuk', 'yukk',
+  'btw', 'otw', 'gk', 'emg', 'emang', 'bhw', 'bahwa', 'krn', 'karna', 'coz',
+  'sbb', 'sebab', 'misal', 'misalnya', 'contohnya', 'cth', 'dgn', 'dg',
+  'utk', 'bgn', 'bgmn', 'bgaimana', 'kapan', 'kpn', 'kmn', 'kemana',
+  'tdk', 'tidak', 'sdh', 'sudah', 'blm', 'blum', 'br', 'baru', 'pd',
+  'pada', 'jd', 'jdi', 'jga', 'jg', 'jgn', 'jangan', 'adlh', 'adalah',
+  'bkn', 'bukan', 'sy', 'saya', 'gw', 'gue', 'aku', 'lo', 'lu', 'ente',
+  'anda', 'kau', 'kmu', 'dia', 'ia', 'ws', 'wis', 'opo', 'apa', 'apakah',
+  'apaan', 'apanya', 'gimana', 'bagaimana', 'gmn', 'kenapa', 'knp', 'knapa',
+  'mengapa', 'nape', 'kabarnya', 'gimana kabar', 'lbs', 'yaelah', 'yelah',
+  'yoi', 'yoo', 'iy', 'iya', 'sip', 'mantul', 'mantap', 'keren', 'stab',
+  'strong',
+
+  // === Sentence-ending particles (percakapan) ===
+  'dong', 'ya', 'kok', 'sih', 'lah', 'kan', 'nah', 'eh', 'dah', 'lho', 'loh',
+  'woy', 'woi', 'halo', 'hai', 'hey', 'oh', 'yaelah',
+
+  // === Interjections and filler words ===
+  'ehm', 'hmm', 'hmmm', 'waduh', 'aduh', 'maaf', 'mohon', 'tolong',
+  'please', 'thanks', 'thx', 'tnx', 'ty', 'np', 'yw', 'cmiiw', 'imho',
+  'tbh', 'afaik', 'fyi', 'asap',
+
+  // === Expressions of emotion ===
+  'wkwk', 'wkwkwk', 'haha', 'hahaha', 'hehe', 'hehehe', 'xixi', 'hihihi',
+  'lol', 'lmao', 'rofl', 'lmfao', 'sike', 'bener', 'beneran', 'serius',
+  'ser banget', 'anjir', 'anjay', 'anjrit', 'bangsat', 'kampret', 'goblok',
+  'tolol', 'idiot', 'debat', 'alay', 'cringe', 'awkward',
+
+  // === Wattpad/modern relationship terms ===
+  'bucin', 'nolep', 'jones', 'sange', 'gag', 'fail', 'epic', 'legend',
+  'pro', 'noob', 'poser', 'hype', 'lit', 'salty', 'thirsty', 'triggered',
+  'canceled', 'catfish', 'lurker', 'microcheating', 'situationship',
+  'situasikelir', 'karma', 'destiny', 'soulmate', 'twin flame', 'lovebird',
+  'rayuan', 'casan', 'mesra', 'bebas', 'complicated', 'single', 'jomblo',
+  'single pride', 'sp', 'move on', 'mo', 'closing', 'healing', 'self love',
+  'self-care', 'mental health', 'trauma', 'abuse', 'toxic', 'narcissist',
+  'gaslighting', 'love bombing', 'hooman', 'bby', 'bb', 'gurl', 'boi',
+  'bae', 'cariqe', 'gb', 'gebetan', 'relationship goals', 'couple goals',
+  'cliche', 'plot twist', 'spoiler', 'teaser', 'ending', 'happy ending',
+  'bad ending', 'canon', 'non-canon', 'headcanon', 'fanfic', 'spin-off',
+  'sequel', 'prequel', 'midquel', 'interquel', 'reboot', 'remake',
+  'adaptation', 'original', 'oc', 'original character', 'self-insert',
+  'si', 'mary sue', 'gary stu', 'mpl', 'smut', 'fluff', 'angst',
+  'hurt/comfort', 'h/c', 'slow burn', 'enemies to lovers', 'etl',
+  'friends to lovers', 'ftl', 'second chance', 'sc', 'forbidden love',
+  'fl', 'secret relationship', 'sr', 'fake dating', 'fd', 'pretend relationship',
+  'pr', 'accidental pregnancy', 'ap', 'secret baby', 'sb', 'secret identity',
+  'amnesia', 'reconciliation', 'reunion', 'childhood friends', 'cmf',
+  'neighbors', 'roommates', 'forced marriage', 'contract marriage',
+  'arranged marriage', 'fake engagement', 'one night stand', 'ons',
+  'casual', 'serious', 'committed', 'ex', 'mantan', 'ex-girlfriend',
+  'ex-boyfriend', 'best friend', 'bf', 'bestie', 'bff',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -173,6 +269,21 @@ export class SpellChecker {
     if (RE_HAS_DOT.test(clean))               return OK('ignored');  // URLs, file extensions
     if (RE_ROMAN.test(clean))                 return OK('ignored');
 
+    // --- Step 1b: Proper noun detection ---
+    // If word is capitalized (not at start of sentence in editor context),
+    // likely a name — check proper noun whitelist
+    const isCapitalized = raw[0] === raw[0].toUpperCase() && raw[0] !== raw[0].toLowerCase();
+    if (isCapitalized && PROPER_NOUNS.has(raw)) {
+      return OK('proper_noun');
+    }
+    // If capitalized and not in dictionary, but could be a name
+    if (isCapitalized && !this.dictionary.has(clean)) {
+      // Heuristic: proper nouns are usually short (<15 chars) and have no apostrophes
+      if (clean.length >= 2 && clean.length < 15 && !clean.includes("'")) {
+        return OK('proper_noun');
+      }
+    }
+
     // --- Step 2: Exact typo map (highest-priority correction) ---
     const typoMatch = this.typoMap[clean];
     if (typoMatch) {
@@ -212,8 +323,21 @@ export class SpellChecker {
       if (base && base !== clean && this.dictionary.has(base)) return OK('correct');
     }
 
-    // --- Step 10: Suggestion generation ---
+    // --- Step 10: Context-aware suggestions ---
     const suggestions = this.findSuggestions(clean, 2, 5);
-    return ERR(suggestions);
+    
+    // Step 10b: If suggestions exist and one matches the expected POS (verb indicator),
+    // boost it. For now, just return the suggestions.
+    if (suggestions.length > 0) {
+      return ERR(suggestions);
+    }
+    
+    // Step 11: No suggestions found — word might be a proper noun or
+    // domain-specific term not in dictionary
+    if (isCapitalized || clean.length <= 3) {
+      return OK('ignored');
+    }
+    
+    return ERR([]);
   }
 }

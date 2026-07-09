@@ -42,6 +42,16 @@
 
 /* ===== CUTE CAT MASCOT ANIMATIONS ===== */
 
+/* Mascot GPU Acceleration Base - ensures smooth rendering on all devices */
+.mascot-gpu-accelerated {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+}
+
 /* Body gentle bob (kawaii sway) */
 @keyframes catBodyBob {
   0% { transform: translateY(0) rotate(0deg); }
@@ -52,6 +62,10 @@
 .animate-bob {
   transform-origin: 50px 90px;
   animation: catBodyBob 3s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Tail gentle sweep */
@@ -64,6 +78,10 @@
 .animate-tail-sweep {
   transform-origin: 80px 80px;
   animation: catTailSweep 3.5s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Blink (slow, cute) */
@@ -75,6 +93,9 @@
 .animate-blink {
   animation: catBlink 4.5s infinite;
   will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Ear twitch (occasional) */
@@ -85,6 +106,10 @@
 
 .animate-ear-twitch {
   animation: earTwitch 7s infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Head tilt (subtle) */
@@ -97,6 +122,10 @@
 .animate-head-tilt {
   transform-origin: 50px 55px;
   animation: headTilt 6s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Paw shuffle (tiny movement) */
@@ -108,6 +137,10 @@
 
 .animate-paw-shuffle {
   animation: pawShuffle 5s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Loading screen: gentle float */
@@ -119,6 +152,10 @@
 
 .animate-float {
   animation: floatPulse 2.5s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Happy bounce (triggered on spell fix) */
@@ -133,6 +170,10 @@
 
 .mascot-happy-bounce {
   animation: happyBounce 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Pop-in animation for Mascot state change */
@@ -144,6 +185,10 @@
 
 .mascot-pop {
   animation: catPop 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Shimmer Loading Skeleton */
@@ -197,13 +242,37 @@
   animation: pulseWarning 2s infinite;
 }
 
-/* Reduce Motion */
+/* Reduce Motion - Keep mascot animations running for user delight */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  /* Respect reduced motion for most elements */
+  body, .view-panel, .transition-fast, .transition-normal, .transition-slow,
+  .bottom-sheet, .settings-panel, .toast, .glass, .pulse-warning,
+  .loading-shimmer, .animate-fade-in, .animate-pop-in, .animate-bounce-in,
+  .suggestion-popup, .share-option-list, .mood-card {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  
+  /* EXCEPTION: Keep mascot alive! The cat keeps users company ~ */
+  .cat-mascot-wrapper,
+  .cat-mascot-wrapper *,
+  .loading-mascot-wrapper,
+  .loading-mascot-wrapper *,
+  .animate-bob,
+  .animate-tail-sweep,
+  .animate-blink,
+  .animate-ear-twitch,
+  .animate-head-tilt,
+  .animate-paw-shuffle,
+  .animate-float,
+  .mascot-happy-bounce,
+  .mascot-pop {
+    animation-duration: inherit !important;
+    animation-iteration-count: infinite !important;
+    transition-duration: 0.2s !important;
+    animation-play-state: running !important;
   }
 }
 

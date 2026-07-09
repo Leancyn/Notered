@@ -30,6 +30,11 @@ const CACHE_DB_VERSION = 4; // Must match dictionary.js
 const CACHE_STORE_NAME = "kbbi_defs";
 const CACHE_KEY_PREFIX = "def_v2_";
 
+// Timeout and retry configuration
+const API_TIMEOUT = 3000; // 3 seconds per attempt
+const MAX_RETRIES = 2; // Total attempts = 1 + MAX_RETRIES
+const RETRY_DELAY = 500; // ms between retries
+
 function _normalizeWord(word) {
   return (word || "").trim().toLowerCase();
 }
@@ -162,9 +167,31 @@ function _processDefinition(rawDef) {
   };
 }
 
+/**
+ * Timeout wrapper for async operations
+ * @param {Promise} promise - The promise to wrap
+ * @param {number} ms - Timeout in milliseconds
+ * @returns {Promise} - Resolves with result or rejects with timeout error
+ */
+async function _withTimeout(promise, ms) {
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('KBBI_API_TIMEOUT')), ms);
+  });
+  
+  return Promise.race([promise, timeoutPromise]);
+}
+
+/**
+ * Sleep for a specified duration
+ * @param {number} ms - Duration in milliseconds
+ */
+function _sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export class KbbiApi {
   /**
-   * Lookup a word definition.
+   * Lookup a word definition with retry and timeout.
    * @param {string} word
    * @returns {Promise<{def: string|null,pos?:string|null,examples?:string[],raw?:string|null,isIncomplete?:boolean}>}
    */
@@ -172,32 +199,59 @@ export class KbbiApi {
     const w = _normalizeWord(word);
     if (!w) return { ...DEFAULT_DEFINITION_FALLBACK };
 
+    // Check negative cache first (for failed lookups)
     const cached = await _getCached(w);
     if (cached) return cached;
 
-    // Load (or fetch) the whole index once.
-    const index = await _getDefinitionsIndex();
+    // Attempt lookup with retry logic for dictionary loading
+    let lastError = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Load (or fetch) the whole index once with timeout
+        const index = await _withTimeout(_getDefinitionsIndex(), API_TIMEOUT);
 
-    const entry = index.get(w);
-    if (!entry) {
-      const empty = { ...DEFAULT_DEFINITION_FALLBACK };
-      empty.def = null;
-      await _setCached(w, empty);
-      return empty;
+        const entry = index.get(w);
+        if (!entry) {
+          const empty = { ...DEFAULT_DEFINITION_FALLBACK };
+          empty.def = null;
+          await _setCached(w, empty);
+          return empty;
+        }
+
+        // Validate + format the definition through the shared pipeline.
+        // This is CPU-bound work, so no timeout needed here.
+        const processed = _processDefinition(entry.def);
+
+        const payload = {
+          def: processed.def,
+          raw: processed.raw,
+          pos: entry.pos,
+          examples: [],
+          isIncomplete: processed.isIncomplete,
+        };
+
+        await _setCached(w, payload);
+        return payload;
+      } catch (error) {
+        lastError = error;
+        
+        // If this is a timeout and we have retries left, wait and retry
+        if (error.message === 'KBBI_API_TIMEOUT' && attempt < MAX_RETRIES) {
+          console.warn(`KBBI lookup timeout for "${w}" (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying...`);
+          await _sleep(RETRY_DELAY);
+          continue;
+        }
+        
+        // For non-timeout errors or final attempt, break and return fallback
+        break;
+      }
     }
 
-    // Validate + format the definition through the shared pipeline.
-    const processed = _processDefinition(entry.def);
-
-    const payload = {
-      def: processed.def,
-      raw: processed.raw,
-      pos: entry.pos,
-      examples: [],
-      isIncomplete: processed.isIncomplete,
-    };
-
-    await _setCached(w, payload);
-    return payload;
+    // All attempts failed - return fallback and cache the failure to avoid repeated attempts
+    console.warn(`KBBI lookup failed for "${w}" after ${MAX_RETRIES + 1} attempts:`, lastError);
+    const empty = { ...DEFAULT_DEFINITION_FALLBACK };
+    empty.def = null;
+    await _setCached(w, empty);
+    return empty;
   }
 }

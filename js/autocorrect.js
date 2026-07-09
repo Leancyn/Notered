@@ -189,7 +189,7 @@ export class Autocorrect {
       c.lengthDelta = lenDiff;
     }
 
-    // 6. Rank and filter
+    // 6. Rank and filter with enhanced scoring
     return candidates
       .filter(c => c.dist <= maxDist + 1)
       .sort((a, b) => {
@@ -215,7 +215,12 @@ export class Autocorrect {
         const fb = this._freq(b.word);
         if (fa !== fb) return fb - fa;
 
-        // g) Lexicographic tie-break
+        // g) Dictionary presence boost (prefer words in KBBI)
+        const aInDict = this.dictionary && this.dictionary.has(a.word) ? 1 : 0;
+        const bInDict = this.dictionary && this.dictionary.has(b.word) ? 1 : 0;
+        if (aInDict !== bInDict) return bInDict - aInDict;
+
+        // h) Lexicographic tie-break
         return a.word.localeCompare(b.word);
       })
       .slice(0, limit);

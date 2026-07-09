@@ -160,6 +160,43 @@ const IRREGULAR_WORDS = new Map([
 
   // study
   ['mempelajari', 'ajar'], ['pelajaran', 'ajar'],
+  
+  // wait for (colloquial)
+  ['menunggu', 'tunggu'], ['menungguin', 'tunggu'], ['nunggu', 'tunggu'],
+  ['nungguin', 'tunggu'],
+  
+  // look for (colloquial)
+  ['mencari', 'cari'], ['nyari', 'cari'], ['carikan', 'cari'],
+  
+  // give (colloquial)
+  ['kasih', 'beri'], ['kasi', 'beri'], ['kasihan', 'beri'],
+  
+  // take/bring (colloquial)
+  ['bawa', 'bawa'], ['bawain', 'bawakan'], ['bawakan', 'bawakan'],
+  
+  // see (colloquial)
+  ['lihat', 'lihat'], ['liatin', 'lihat'], ['lihatin', 'lihat'],
+  ['ngeliat', 'lihat'], ['ngelihat', 'lihat'],
+  
+  // know (colloquial)
+  ['tahu', 'tahu'], ['tau', 'tahu'], ['ta', 'tahu'],
+  
+  // can (colloquial)
+  ['bisa', 'bisa'], ['bisa2', 'bisa'], ['bsa', 'bisa'],
+  
+  // want (colloquial)
+  ['ingin', 'ingin'], ['pengen', 'ingin'], ['pgn', 'ingin'],
+  ['mau', 'mau'],
+  
+  // make/do (colloquial)
+  ['buat', 'buat'], ['bikin', 'buat'], ['bikin2', 'buat'],
+  
+  // finish
+  ['selesai', 'selesai'], ['kerjaan', 'kerja'],
+  
+  // emotional states
+  ['marah', 'marah'], ['kesal', 'kesal'], ['sabar', 'sabar'],
+  ['galau', 'galau'], ['baper', 'baper'],
 ]);
 
 // ---- Suffix rules --------------------------------------------------------
@@ -243,6 +280,43 @@ function applyPrefixRules(word, rules) {
   return null;
 }
 
+/**
+ * Stem Indonesian words with colloquial/slang support
+ * Handles informal prefixes like ng-, ny-, nge-, nyel- etc.
+ * @param {string} word - Input word
+ * @param {Set<string>} [dictionary] - Dictionary for validation
+ * @returns {string} Stemmed word
+ */
+function applyColloquialPrefixRules(word, dictionary) {
+  // Colloquial prefixes in Indonesian slang/chat
+  const colloquialPrefixes = [
+    { prefix: 'ngel',    strip: 4, restore: null, dictAlternative: 'l' }, // ngeliat → lihat
+    { prefix: 'ngom',    strip: 4, restore: null, dictAlternative: 'omong' },
+    { prefix: 'ng',      strip: 2, restore: null, dictAlternative: null }, // nggak → ?
+    { prefix: 'ny',      strip: 2, restore: 'n', dictAlternative: null }, // nyari → cari
+    { prefix: 'nge',     strip: 3, restore: null, dictAlternative: null }, // ngebuka → buka
+    { prefix: 'nyel',    strip: 4, restore: null, dictAlternative: 's' },
+  ];
+  
+  for (const rule of colloquialPrefixes) {
+    if (!word.startsWith(rule.prefix)) continue;
+    
+    let stem = word.slice(rule.strip);
+    
+    // Special handling for some colloquial forms
+    if (rule.dictAlternative) {
+      // Try dictionary alternative first (nyari → cari)
+      if (dictionary && dictionary.has(rule.dictAlternative)) {
+        return rule.dictAlternative;
+      }
+    }
+    
+    if (stem.length >= 2) return stem;
+  }
+  
+  return null;
+}
+
 // ---- Core Stem Function -------------------------------------------------
 
 /**
@@ -302,6 +376,11 @@ export function stem(word, dictionary = null) {
     stemmed = wForPrefix.slice(2);
   } else if (wForPrefix.startsWith('se') && wForPrefix.length > 4) {
     stemmed = wForPrefix.slice(2);
+  }
+  
+  // 7b. Try colloquial prefixes (ny-, nge-, ngel-, etc.)
+  if (!stemmed) {
+    stemmed = applyColloquialPrefixRules(wForPrefix, dictionary);
   }
 
   if (stemmed) {

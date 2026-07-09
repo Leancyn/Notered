@@ -726,12 +726,24 @@ class App {
   async _resolveKbbiCrossReference(defText) {
     if (!defText) return defText;
 
+    // Initialize cache if not present
+    if (!this._crossRefCache) {
+      this._crossRefCache = new Map();
+    }
+
     // Match "Lihat", "Lihat:", "lihat" followed by the target word.
     const m = defText.match(/^\s*lihat\s*:?\s*([\p{L}\p{M}.·'-]+(?:\s[\p{L}\p{M}.·'-]+)?)/ui);
     if (!m) return defText;
 
     const target = m[1].trim().toLowerCase();
-    if (!target || target === (this.dictionary ? '' : '')) return defText;
+    if (!target) return defText;
+
+    // Check cache first to avoid repeated API calls
+    const cacheKey = `xref:${target}`;
+    if (this._crossRefCache.has(cacheKey)) {
+      const cached = this._crossRefCache.get(cacheKey);
+      return cached !== null ? cached : defText;
+    }
 
     // Look up the target word in the dictionary.
     let targetDef = this.dictionary.getDefinition(target);
@@ -743,15 +755,19 @@ class App {
       try {
         const apiResult = await KbbiApi.lookup(target);
         if (apiResult && apiResult.def) {
+          this._crossRefCache.set(cacheKey, apiResult.def);
           return apiResult.def;
         }
       } catch (_) {
         // fall through to original text
       }
     } else {
+      this._crossRefCache.set(cacheKey, targetDef.arti);
       return targetDef.arti;
     }
 
+    // Cache miss - store null to avoid repeated lookups for this session
+    this._crossRefCache.set(cacheKey, null);
     return defText;
   }
 

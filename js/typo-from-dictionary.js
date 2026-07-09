@@ -23,6 +23,23 @@
 
 const DEFAULT_DICTIONARY_URL = "./data/dictionary__JSON.json";
 
+/**
+ * Decode HTML entities (needed for proper pattern matching)
+ */
+function _decodeHtmlEntities(str) {
+  const e = '&';
+  return str
+    .replace(new RegExp(e + 'nbsp;', 'g'), ' ')
+    .replace(new RegExp(e + 'lt;', 'g'), '<')
+    .replace(new RegExp(e + 'gt;', 'g'), '>')
+    .replace(new RegExp(e + 'quot;', 'g'), '"')
+    .replace(new RegExp(e + 'apos;', 'g'), "'")
+    .replace(new RegExp(e + '#39;', 'g'), "'")
+    .replace(new RegExp(e + 'amp;', 'g'), '&')
+    .replace(/#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+}
+
 function normalizeWord(w) {
   return (
     (w ?? "")
@@ -54,7 +71,7 @@ function isValidPair(from, to) {
 
   // Skip common HTML tag remnants that might appear as "to" value
   // (e.g., "br" from <br> being parsed as typo target)
-  const skipValues = ['br', 'gt', 'lt', 'amp', 'quot', 'apos', 'nbsp'];
+  const skipValues = ["br", "gt", "lt", "amp", "quot", "apos", "nbsp"];
   if (skipValues.includes(to.toLowerCase())) return false;
 
   return true;
@@ -70,14 +87,14 @@ function isLikelyTypoPair(from, to) {
   // We still filter out pairs that are obviously unrelated.
   const dist = levenshteinDistance(from, to);
   if (dist > 8) return false;
-  
+
   // Allow meaningful length difference for abbreviations/slang
   if (Math.abs(from.length - to.length) > 10) return false;
-  
+
   // Heuristic: if one starts with the other, it's likely a valid relationship
   const prefixMatch = to.startsWith(from.slice(0, 2)) || from.startsWith(to.slice(0, 2));
   if (!prefixMatch && dist > 4) return false;
-  
+
   return true;
 }
 
@@ -89,19 +106,15 @@ function levenshteinDistance(a, b) {
   const m = b.length;
   if (n === 0) return m;
   if (m === 0) return n;
-  
+
   const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = 0; i <= n; i++) dp[i][0] = i;
   for (let j = 0; j <= m; j++) dp[0][j] = j;
-  
+
   for (let i = 1; i <= n; i++) {
     for (let j = 1; j <= m; j++) {
       const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + cost
-      );
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
     }
   }
   return dp[n][m];
